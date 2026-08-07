@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+pydantic-settings
+resend
+slack-sdk
+jinja2
+httpx
