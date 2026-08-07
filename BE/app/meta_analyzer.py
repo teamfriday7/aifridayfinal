@@ -104,6 +104,7 @@ class MetaAnalyzer:
         sonar_report: dict | None = None,
         kb_result: dict | None = None,
         logic_findings: list[dict] | None = None,
+        codebert_result: dict | None = None,
     ) -> dict[str, Any]:
         """Merge all findings, score, persist, and return summary.
 
@@ -124,7 +125,7 @@ class MetaAnalyzer:
         logger.info("🧠  META-ANALYZER — commit %s", short)
 
         # 1. Normalise all findings
-        all_findings = self._normalise(sonar_report, logic_findings or [])
+        all_findings = self._normalise(sonar_report, logic_findings or [], codebert_result)
         logger.info("    Raw merged findings: %d", len(all_findings))
 
         # 2. Deduplicate
@@ -191,6 +192,7 @@ class MetaAnalyzer:
         self,
         sonar_report: dict | None,
         logic_findings: list[dict],
+        codebert_result: dict | None = None,
     ) -> list[dict]:
         """Unify SonarCloud issues + Logic Analyzer findings into one list."""
         normalised: list[dict] = []
@@ -217,6 +219,24 @@ class MetaAnalyzer:
         # ── Logic Analyzer findings
         for finding in logic_findings:
             normalised.append(finding)
+
+        # ── CodeBERT findings
+        if codebert_result:
+            for cat in ["code_smells", "bug_prone_patterns", "poor_naming"]:
+                for item in codebert_result.get(cat, []):
+                    normalised.append({
+                        "agent_type": "codebert",
+                        "file_path": "diff_content",
+                        "line_start": None,
+                        "line_end": None,
+                        "category": "maintainability" if cat == "code_smells" else "quality",
+                        "severity": item.get("severity", "medium"),
+                        "title": f"[{item.get('rule', 'Semantic Issue')}]",
+                        "message": item.get("description", ""),
+                        "original_code": None,
+                        "suggested_code": None,
+                        "confidence": 0.85,
+                    })
 
         return normalised
 

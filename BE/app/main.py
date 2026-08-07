@@ -42,6 +42,10 @@ from .knowledge_base_agent import KnowledgeBaseAgent
 from .code_logic_analyzer import CodeLogicAnalyzer
 from .meta_analyzer import MetaAnalyzer
 from .commit_applier import CommitApplier
+from .codebert_agent import CodeAnalyzer
+
+# Initialize CodeBERT globally so the heavy transformer model is only loaded once
+codebert_analyzer = CodeAnalyzer()
 
 # ─── Logging ────────────────────────────────────────────────────────────────────
 
@@ -271,12 +275,30 @@ async def lifespan(app: FastAPI):
                 await ws_manager.broadcast({"type": "agent_finished", "agent": "logic_analyzer", "details": f"{findings} findings", "findings": findings})
                 return res
 
+            async def _do_codebert():
+                await ws_manager.broadcast({"type": "agent_started", "agent": "codebert_agent"})
+                
+                changed_files = commit_info.get("changed_files", [])
+                logger.info("🤖  CodeBERT Agent: analysing semantic diff (%d changed files) ...", len(changed_files))
+                
+                diff = commit_info.get("diff_content", "")
+                res = codebert_analyzer.analyze_semantics(diff) if diff else {}
+                findings_count = len(res.get("code_smells", [])) + len(res.get("bug_prone_patterns", []))
+                await ws_manager.broadcast({"type": "agent_finished", "agent": "codebert_agent", "details": f"{findings_count} semantic smells"})
+                return res
+
             kb_task = asyncio.create_task(_do_kb())
             sonar_task = asyncio.create_task(_do_sonar())
             logic_task = asyncio.create_task(_do_logic(kb_task))
+            codebert_task = asyncio.create_task(_do_codebert())
 
-            sonar_report, logic_findings = await asyncio.gather(sonar_task, logic_task, return_exceptions=False)
+            sonar_report, logic_findings, codebert_result = await asyncio.gather(sonar_task, logic_task, codebert_task, return_exceptions=False)
             kb_result = kb_task.result()
+
+            logger.info("🧠  Logic Analyzer Output:\n%s", json.dumps(logic_findings, indent=2))
+            if isinstance(codebert_result, dict):
+                cb_print = {k: v for k, v in codebert_result.items() if k != "embedding"}
+                logger.info("🤖  CodeBERT Output:\n%s", json.dumps(cb_print, indent=2))
 
             await ws_manager.broadcast({"type": "agent_started", "agent": "meta_analyzer"})
             
@@ -287,7 +309,10 @@ async def lifespan(app: FastAPI):
                 sonar_report=sonar_report if isinstance(sonar_report, dict) else {},
                 kb_result=kb_result,
                 logic_findings=logic_findings if isinstance(logic_findings, list) else [],
+                codebert_result=codebert_result if isinstance(codebert_result, dict) else {},
             )
+
+            logger.info("✨  Meta Analyzer Output:\n%s", json.dumps(summary, indent=2))
 
             score = summary.get("composite_score", 0)
             total_findings = summary.get("total_findings", 0)
@@ -818,34 +843,6 @@ class ReviewFeedbackRequest(BaseModel):
 
 @app.put(
     "/api/reviews/{review_id}/accept",
-    tags=["Reviews"], summary="Accept a review suggestion and record feedback",
-)
-def accept_review(review_id: int, req: Optional[ReviewFeedbackRequest] = None, db: Session = Depends(get_db)):
-    review = db.query(CodeReview).filter(CodeReview.id == review_id).first()
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
-    return {
-        "id": review.id,
-        "commit_id": review.commit_id,
-        "agent_type": review.agent_type,
-        "severity": review.severity,
-        "file_path": review.file_path,
-        "line_start": review.line_start,
-        "line_end": review.line_end,
-        "category": review.category,
-        "title": review.title,
-        "message": review.message,
-        "suggestion": review.suggestion,
-        "original_code": review.original_code,
-        "suggested_code": review.suggested_code,
-        "status": review.status,
-        "confidence": review.confidence,
-        "created_at": review.created_at.isoformat(),
-    }
-
-
-@app.put(
-    "/api/reviews/{review_id}/accept",
     tags=["Reviews"], summary="Accept a review suggestion and create AI commit",
 )
 def accept_review(
@@ -941,7 +938,8 @@ def record_codebert_feedback(req: DirectFeedbackRequest, db: Session = Depends(g
         rule_category=req.rule_category,
         reason=req.reason or "",
     )
-    return {"message": "Feedback recorded", "feedback_id": fb.id}
+    logger.info("🤖  CodeBERT Agent: logged feedback for category '%s' (action: %s)", req.rule_category, req.action)
+    return {"status": "success", "recorded_action": req.action, "feedback_id": fb.id}
 
 
 @app.get(
