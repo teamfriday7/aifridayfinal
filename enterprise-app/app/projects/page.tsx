@@ -1,6 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Badge,
+  Button,
+  Field,
+  Input,
+  Spinner,
+  Text,
+  Textarea,
+} from "@fluentui/react-components";
 import { AppShell } from "@/components/layout/app-shell";
 import { apiClient } from "@/lib/api-client";
 import type { Project } from "@/lib/types";
@@ -43,62 +52,80 @@ export default function ProjectsPage() {
 
   return (
     <AppShell>
-      <section className="rounded-3xl border border-white/10 bg-slate-950/60 p-6 shadow-2xl shadow-black/30">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      {/* Header card */}
+      <div className="ado-card">
+        <div className="ado-card-header flex items-center justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.35em] text-cyan-400">Repository registry</p>
-            <h2 className="mt-2 text-3xl font-semibold text-white">Tracked projects</h2>
-            <p className="mt-2 text-sm text-slate-400">Use the existing backend registration endpoint to connect repositories to the watcher.</p>
+            <div className="flex items-center gap-2">
+              <Badge appearance="filled" color="brand">Repos Hub</Badge>
+              <Text size={200} style={{ color: "var(--muted)" }}>Repository Settings & Watcher</Text>
+            </div>
+            <h2 className="text-lg font-bold text-[color:var(--text)] mt-1">Tracked Repositories</h2>
           </div>
-          <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-200">
-            Endpoints: /api/projects and /api/projects/{"id"}/activate
-          </div>
+          <Badge appearance="tint" color="informative">{projects.length} connected</Badge>
         </div>
+      </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Project name</label>
-              <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900 px-3 py-2 text-white" />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Repository path</label>
-              <input value={repoPath} onChange={(event) => setRepoPath(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900 px-3 py-2 text-white" />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Description</label>
-              <textarea value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-24 w-full rounded-2xl border border-white/10 bg-slate-900 px-3 py-2 text-white" />
-            </div>
-            {message ? <p className="text-sm text-slate-300">{message}</p> : null}
-            <button onClick={handleCreate} disabled={busy} className="w-full rounded-2xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60">
-              {busy ? "Registering…" : "Register project"}
-            </button>
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-[380px_minmax(0,1fr)]">
+        {/* Register repo form */}
+        <div className="ado-card p-4 space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-[color:var(--text)]">Register Repository</h3>
+            <p className="text-xs text-[color:var(--muted)] mt-0.5">Add a repository path for real-time AI commit watching.</p>
           </div>
 
           <div className="space-y-3">
+            <Field label="Project Name">
+              <Input value={name} onChange={(_, data) => setName(data.value)} />
+            </Field>
+            <Field label="Repository Local Path">
+              <Input value={repoPath} onChange={(_, data) => setRepoPath(data.value)} />
+            </Field>
+            <Field label="Description">
+              <Textarea value={description} onChange={(_, data) => setDescription(data.value)} resize="vertical" />
+            </Field>
+            {message ? <p className="text-xs text-emerald-400 font-semibold">{message}</p> : null}
+            <Button appearance="primary" onClick={handleCreate} disabled={busy} className="w-full">
+              {busy ? "Registering…" : "Register Repository"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Repos list */}
+        <div className="ado-card">
+          <div className="ado-card-header flex items-center justify-between">
+            <h3 className="text-sm font-bold text-[color:var(--text)]">Repository Inventory</h3>
+            <span className="text-xs text-[color:var(--muted)]">Active Watcher List</span>
+          </div>
+
+          <div className="p-4 space-y-3">
             {loading ? (
-              <div className="animate-pulse space-y-3">
-                {[...Array(3)].map((_, index) => <div key={index} className="h-24 rounded-2xl bg-slate-800" />)}
-              </div>
+              <div className="py-8 text-center"><Spinner label="Loading projects" /></div>
+            ) : projects.length === 0 ? (
+              <Text>No projects registered yet.</Text>
             ) : (
               projects.map((project) => (
-                <div key={project.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-white">{project.name}</p>
-                      <p className="mt-1 text-sm text-slate-400">{project.description || "No description provided"}</p>
+                <div key={project.id} className="soft-card p-4 flex items-start justify-between gap-4">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-[color:var(--text)]">{project.name}</span>
+                      <span className="font-mono text-[10px] text-[color:var(--accent)] bg-[color:var(--surface)] px-2 py-0.5 rounded border border-[color:var(--border)]">
+                        {project.repo_path}
+                      </span>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs uppercase tracking-[0.2em] ${project.is_watching ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-200" : "border border-slate-500/20 bg-slate-500/10 text-slate-300"}`}>
-                      {project.is_watching ? "watching" : "idle"}
-                    </span>
+                    <p className="text-xs text-[color:var(--muted)]">{project.description || "No description provided"}</p>
                   </div>
-                  <p className="mt-4 text-xs text-slate-500">{project.repo_path}</p>
+
+                  <Badge appearance="filled" color={project.is_watching ? "success" : "subtle"} size="small">
+                    {project.is_watching ? "Watching" : "Idle"}
+                  </Badge>
                 </div>
               ))
             )}
           </div>
         </div>
-      </section>
+      </div>
     </AppShell>
   );
 }
+
