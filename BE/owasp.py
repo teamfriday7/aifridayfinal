@@ -108,3 +108,10 @@ with open(
 
 
 print("Reports Generated")
+
+
+# https://www.zaproxy.org/download/
+# zap.bat -daemon -port 8080 -config api.key=12345
+# http://localhost:8080
+# 
+# curl "http://localhost:8080/JSON/core/view/version/?apikey=12345"
