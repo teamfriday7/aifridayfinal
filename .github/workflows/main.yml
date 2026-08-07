@@ -3,9 +3,9 @@ run-name: "${{ github.actor }} triggered CI on ${{ github.ref_name }}"
 
 on:
   push:
-    branches: [github_actions]
+    branches: [main , github_actions]
   pull_request:
-    branches: [github_actions]
+    branches: [main , github_actions]
 
 # Cancel in-progress runs on the same branch
 concurrency:
