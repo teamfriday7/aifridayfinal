@@ -1,0 +1,192 @@
+{
+  "name": "codeguardian-review",
+  "displayName": "CodeGuardian Git-Native AI Code Review Assistant",
+  "description": "Production-grade, Git-native AI pre-commit and pre-push code review assistant with interactive diffs, inline suggestions, and rule enforcement.",
+  "version": "0.2.0",
+  "publisher": "codeguardian",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Source Control",
+    "Linters",
+    "AI"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codeguardian-view-container",
+          "title": "CodeGuardian Review",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "views": {
+      "codeguardian-view-container": [
+        {
+          "id": "codeguardian.reviewTree",
+          "name": "Git Review Explorer",
+          "icon": "$(git-commit)"
+        },
+        {
+          "id": "codeguardian.findingsTree",
+          "name": "Active Findings & Suggestions",
+          "icon": "$(alert)"
+        },
+        {
+          "id": "codeguardian.historyTree",
+          "name": "Review History & Audit",
+          "icon": "$(history)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "codeguardian.analyzeStaged",
+        "title": "CodeGuardian: Analyze Pre-Commit (Staged Changes)",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "codeguardian.analyzeLatestCommit",
+        "title": "CodeGuardian: Analyze Pre-Push (Unpushed Commits)",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "codeguardian.openReviewStudio",
+        "title": "CodeGuardian: Open Review Studio",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "codeguardian.installHooks",
+        "title": "CodeGuardian: Install Git Pre-Commit & Pre-Push Hooks",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "codeguardian.acceptFinding",
+        "title": "Accept Suggestion",
+        "icon": "$(check)"
+      },
+      {
+        "command": "codeguardian.rejectFinding",
+        "title": "Reject Suggestion",
+        "icon": "$(close)"
+      },
+      {
+        "command": "codeguardian.rewriteFinding",
+        "title": "Rewrite Fix with AI",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "codeguardian.explainFinding",
+        "title": "Explain Issue with AI",
+        "icon": "$(info)"
+      },
+      {
+        "command": "codeguardian.ignoreFinding",
+        "title": "Ignore Finding",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "codeguardian.openDiff",
+        "title": "Open Diff Review"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "codeguardian.analyzeStaged",
+          "when": "view == codeguardian.reviewTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codeguardian.analyzeLatestCommit",
+          "when": "view == codeguardian.reviewTree",
+          "group": "navigation@2"
+        },
+        {
+          "command": "codeguardian.openReviewStudio",
+          "when": "view == codeguardian.reviewTree",
+          "group": "navigation@3"
+        },
+        {
+          "command": "codeguardian.installHooks",
+          "when": "view == codeguardian.reviewTree",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "codeguardian.acceptFinding",
+          "when": "view == codeguardian.findingsTree && viewItem == findingItem",
+          "group": "inline@1"
+        },
+        {
+          "command": "codeguardian.rejectFinding",
+          "when": "view == codeguardian.findingsTree && viewItem == findingItem",
+          "group": "inline@2"
+        },
+        {
+          "command": "codeguardian.rewriteFinding",
+          "when": "view == codeguardian.findingsTree && viewItem == findingItem",
+          "group": "inline@3"
+        },
+        {
+          "command": "codeguardian.explainFinding",
+          "when": "view == codeguardian.findingsTree && viewItem == findingItem",
+          "group": "inline@4"
+        },
+        {
+          "command": "codeguardian.ignoreFinding",
+          "when": "view == codeguardian.findingsTree && viewItem == findingItem",
+          "group": "inline@5"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CodeGuardian",
+      "properties": {
+        "codeguardian.beBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8010",
+          "description": "URL of the standalone CodeGuardian BE analysis sidecar."
+        },
+        "codeguardian.authToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional sidecar token. For terminal pre-push checks, set the `CODEGUARDIAN_BE_TOKEN` environment variable instead."
+        },
+        "codeguardian.blockCommitOnHighSeverity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Prevent pre-commit when a high or critical security finding is detected in staged changes."
+        },
+        "codeguardian.blockPushOnHighSeverity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Prevent pre-push when a high or critical finding is detected in unpushed commits."
+        },
+        "codeguardian.analyzeAfterCommit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Analyze the latest commit whenever Git HEAD changes in the workspace."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.7.0"
+  }
+}
