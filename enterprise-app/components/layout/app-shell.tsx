@@ -41,6 +41,7 @@ interface NavGroup {
     hint: string;
     icon: any;
     badge?: string;
+    adminOnly?: boolean;
   }[];
 }
 
@@ -62,12 +63,13 @@ const navGroups: NavGroup[] = [
     groupLabel: "Pipelines",
     items: [
       { href: "/reviews", label: "Review Queue", hint: "AI agent findings", icon: Code24Regular, badge: "AI" },
+      { href: "/pull-request", label: "Create Pull Request", hint: "Compare & merge branches", icon: Branch24Regular },
     ],
   },
   {
     groupLabel: "Analytics",
     items: [
-      { href: "/leaderboard", label: "Velocity & Quality", hint: "Developer metrics", icon: DataHistogram24Regular },
+      { href: "/leaderboard", label: "Developers", hint: "Developer metrics", icon: DataHistogram24Regular },
     ],
   },
 ];
@@ -163,6 +165,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (pathname?.startsWith("/projects")) return ["Repos", "Files & Repositories"];
     if (pathname?.startsWith("/commits")) return ["Repos", "Commits & Diffs"];
     if (pathname?.startsWith("/reviews")) return ["Pipelines", "Review Queue"];
+    if (pathname?.startsWith("/pull-request")) return ["Pipelines", "Create Pull Request"];
     if (pathname?.startsWith("/leaderboard")) return ["Analytics", "Velocity & Quality"];
     return ["Overview", "Console"];
   };
@@ -327,7 +330,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     {group.groupLabel}
                   </Text>
 
-                  {group.items.map((item) => {
+                  {group.items.filter((item) => !item.adminOnly || user?.role === 'admin').map((item) => {
                     const active = pathname?.startsWith(item.href);
                     const Icon = item.icon;
                     return (
@@ -445,6 +448,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ["Repositories & Source Files", "/projects"],
                 ["Commit History & Code Diffs", "/commits"],
                 ["AI Review Suggestions Queue", "/reviews"],
+                ["Create Pull Request", "/pull-request"],
                 ["Developer Quality Leaderboard", "/leaderboard"],
               ].map(([label, href]) => (
                 <Button

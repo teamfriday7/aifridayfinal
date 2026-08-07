@@ -88,7 +88,9 @@ function DashboardPage() {
           <MetricCard label="Pending Reviews" value={stats?.pending_reviews ?? 0} detail="awaiting action" />
           <MetricCard label="Fixes Accepted" value={stats?.accepted_reviews ?? 0} detail="auto-committed" />
           <MetricCard label="Active Repos" value={stats?.active_watchers ?? 0} detail="live watchers" />
-          <MetricCard label="Developers" value={stats?.total_developers ?? 0} detail="team velocity" />
+          {user?.role === 'admin' && (
+            <MetricCard label="Developers" value={stats?.total_developers ?? 0} detail="team velocity" />
+          )}
         </div>
       </div>
 

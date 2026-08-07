@@ -198,3 +198,32 @@ class AnalysisSummary(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     commit = relationship("Commit", backref=backref("analysis_summary", uselist=False))
+
+
+class PullRequest(Base):
+    """Pull Request record created by developer, reviewed by admin."""
+    __tablename__ = "pull_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_branch = Column(String(200), nullable=False)
+    destination_branch = Column(String(200), nullable=False)
+    status = Column(String(20), default="pending")  # pending / approved / rejected
+    created_by = Column(String(100), default="developer")
+
+    # AI analysis results (stored as JSON strings)
+    ai_summary = Column(Text, default="")
+    ai_conflicts = Column(Text, default="[]")         # JSON list of conflict objects
+    ai_recommendations = Column(Text, default="[]")   # JSON list of strings
+    changed_files = Column(Text, default="[]")        # JSON list of file paths
+    files_changed = Column(Integer, default=0)
+    insertions = Column(Integer, default=0)
+    deletions = Column(Integer, default=0)
+    has_conflicts = Column(Boolean, default=False)
+
+    # Admin review
+    admin_comment = Column(Text, default="")
+    reviewed_by = Column(String(100), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)

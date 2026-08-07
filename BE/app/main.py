@@ -43,6 +43,7 @@ from .code_logic_analyzer import CodeLogicAnalyzer
 from .meta_analyzer import MetaAnalyzer
 from .commit_applier import CommitApplier
 from .codebert_agent import CodeAnalyzer
+from .pr_agent import PRAgent
 
 # Initialize CodeBERT globally so the heavy transformer model is only loaded once
 codebert_analyzer = CodeAnalyzer()
@@ -390,8 +391,8 @@ app.add_middleware(
         "http://localhost:3001",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
-        "http://localhost:8001",
-        "http://127.0.0.1:8001",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
         # Local network IPs for demo/hackathon
         "http://10.167.80.174:3000",
         "http://10.167.80.174:8000",
@@ -816,6 +817,7 @@ def list_reviews(
                 "commit_id": r.commit_id,
                 "agent_type": r.agent_type,
                 "severity": r.severity,
+                "severity": r.severity,
                 "file_path": r.file_path,
                 "line_start": r.line_start,
                 "line_end": r.line_end,
@@ -860,7 +862,6 @@ def accept_review(
 
     result = {"review_accepted": True, "commit_result": None}
 
-    # Apply the fix if suggested_code is available
     if review.suggested_code and review.suggested_code.strip():
         applier = CommitApplier(working_copy=working_copy)
         commit_result = applier.apply_fix(
@@ -880,12 +881,11 @@ def accept_review(
     else:
         result["commit_result"] = {"success": False, "error": "No suggested_code available"}
 
-    # Always mark as accepted in DB
     review.status = "accepted"
     db.commit()
 
-    category = (req.rule_category if req else None) or review.category or "general"
-    reason = (req.reason if req else "") or "Developer accepted suggestion"
+    category = (request.rule_category if request else None) or review.category or "general"
+    reason = (request.reason if request else "") or "Developer accepted suggestion"
 
     FeedbackLearningEngine.record_feedback(
         db=db,
@@ -938,7 +938,7 @@ def record_codebert_feedback(req: DirectFeedbackRequest, db: Session = Depends(g
         rule_category=req.rule_category,
         reason=req.reason or "",
     )
-    logger.info("🤖  CodeBERT Agent: logged feedback for category '%s' (action: %s)", req.rule_category, req.action)
+    logger.info("CodeBERT Agent: logged feedback for category '%s' (action: %s)", req.rule_category, req.action)
     return {"status": "success", "recorded_action": req.action, "feedback_id": fb.id}
 
 
@@ -954,8 +954,6 @@ def get_feedback_analytics(db: Session = Depends(get_db)):
 def codebert_analyze(req: CodeAnalyzeRequest, db: Session = Depends(get_db)):
     learned_prefs = FeedbackLearningEngine.get_learned_preferences(db)
     semantics = codebert_analyzer.analyze_semantics(req.code)
-
-    # Apply self-learned suppressions to findings
     filtered_semantics = FeedbackLearningEngine.filter_findings_with_learning(semantics, learned_prefs)
     review_comment = LLMReviewSynthesizer.generate_review_comment(filtered_semantics, None, learned_prefs)
 
@@ -985,7 +983,6 @@ def codebert_diff(req: CodeDiffRequest, db: Session = Depends(get_db)):
     learned_prefs = FeedbackLearningEngine.get_learned_preferences(db)
     diff_analysis = codebert_analyzer.compare_diff(req.old_code, req.new_code)
     semantics = codebert_analyzer.analyze_semantics(req.new_code)
-
     filtered_semantics = FeedbackLearningEngine.filter_findings_with_learning(semantics, learned_prefs)
     review_comment = LLMReviewSynthesizer.generate_review_comment(filtered_semantics, diff_analysis, learned_prefs)
 
@@ -997,15 +994,14 @@ def codebert_diff(req: CodeDiffRequest, db: Session = Depends(get_db)):
     }
 
 
-# ─── Dashboard ─────────────────────────────────────────────────────────────────
+# --- Dashboard ---------------------------------------------------------------
 
 
 @app.get("/api/dashboard/stats", tags=["Dashboard"], summary="Dashboard statistics")
 def dashboard_stats(db: Session = Depends(get_db)):
-    # Compute average composite score from summaries if AnalysisSummary table exists
     try:
-        from .models import AnalysisSummary
-        summaries = db.query(AnalysisSummary).all()
+        from .models import AnalysisSummary as AS
+        summaries = db.query(AS).all()
         avg_score = (
             sum(s.composite_score for s in summaries) / len(summaries)
             if summaries else 0
@@ -1019,15 +1015,9 @@ def dashboard_stats(db: Session = Depends(get_db)):
         "total_reviews": db.query(CodeReview).count(),
         "total_projects": db.query(Project).count(),
         "total_developers": db.query(User).filter(User.role == "developer").count(),
-        "pending_reviews": db.query(CodeReview).filter(
-            CodeReview.status == "pending",
-        ).count(),
-        "accepted_reviews": db.query(CodeReview).filter(
-            CodeReview.status == "accepted",
-        ).count(),
-        "rejected_reviews": db.query(CodeReview).filter(
-            CodeReview.status == "rejected",
-        ).count(),
+        "pending_reviews": db.query(CodeReview).filter(CodeReview.status == "pending").count(),
+        "accepted_reviews": db.query(CodeReview).filter(CodeReview.status == "accepted").count(),
+        "rejected_reviews": db.query(CodeReview).filter(CodeReview.status == "rejected").count(),
         "active_watchers": len(watcher_manager.watchers),
         "ws_connections": len(ws_manager.active_connections),
         "avg_composite_score": round(avg_score, 1),
@@ -1037,76 +1027,45 @@ def dashboard_stats(db: Session = Depends(get_db)):
 
 @app.get("/api/dashboard/leaderboard", tags=["Dashboard"], summary="Developer quality leaderboard")
 def get_leaderboard(db: Session = Depends(get_db)):
-    """Return developers ranked by their code quality (based on commit analysis scores)."""
     developers = db.query(User).filter(User.role == "developer").all()
-
     leaderboard = []
     for dev in developers:
-        commits = db.query(Commit).filter(
-            Commit.author_email == dev.email
-        ).all()
+        commits = db.query(Commit).filter(Commit.author_email == dev.email).all()
         commit_ids = [c.id for c in commits]
-
         summaries = []
         for cid in commit_ids:
             c = db.query(Commit).filter(Commit.id == cid).first()
             if c and hasattr(c, "analysis_summary") and c.analysis_summary:
                 summaries.append(c.analysis_summary)
-
         avg_score = (
             sum(s.composite_score for s in summaries) / len(summaries)
-            if summaries else 75.0  # default for new devs
+            if summaries else 75.0
         )
-
-        total_reviews = db.query(CodeReview).filter(
-            CodeReview.commit_id.in_(commit_ids)
-        ).count() if commit_ids else 0
-
-        accepted = db.query(CodeReview).filter(
-            CodeReview.commit_id.in_(commit_ids),
-            CodeReview.status == "accepted",
-        ).count() if commit_ids else 0
-
+        total_reviews = db.query(CodeReview).filter(CodeReview.commit_id.in_(commit_ids)).count() if commit_ids else 0
+        accepted = db.query(CodeReview).filter(CodeReview.commit_id.in_(commit_ids), CodeReview.status == "accepted").count() if commit_ids else 0
         leaderboard.append({
-            "user_id": dev.id,
-            "username": dev.username,
-            "full_name": dev.full_name,
-            "email": dev.email,
-            "total_commits": len(commits),
-            "avg_quality_score": round(avg_score, 1),
-            "total_reviews": total_reviews,
+            "user_id": dev.id, "username": dev.username, "full_name": dev.full_name,
+            "email": dev.email, "total_commits": len(commits),
+            "avg_quality_score": round(avg_score, 1), "total_reviews": total_reviews,
             "accepted_suggestions": accepted,
             "acceptance_rate": round(accepted / total_reviews * 100, 1) if total_reviews > 0 else 0,
         })
-
     leaderboard.sort(key=lambda d: d["avg_quality_score"], reverse=True)
     for i, d in enumerate(leaderboard):
         d["rank"] = i + 1
-
     return leaderboard
 
 
-# ─── Users ─────────────────────────────────────────────────────────────────────
+# --- Users -------------------------------------------------------------------
 
 
 @app.get("/api/users", tags=["Users"], summary="List all users")
 def list_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
-    return [
-        {
-            "id": u.id,
-            "username": u.username,
-            "email": u.email,
-            "full_name": u.full_name,
-            "role": u.role,
-            "is_active": u.is_active,
-            "created_at": u.created_at.isoformat(),
-        }
-        for u in users
-    ]
+    return [{"id": u.id, "username": u.username, "email": u.email, "full_name": u.full_name, "role": u.role, "is_active": u.is_active, "created_at": u.created_at.isoformat()} for u in users]
 
 
-# ─── WebSocket ─────────────────────────────────────────────────────────────────
+# --- WebSocket ---------------------------------------------------------------
 
 
 @app.websocket("/ws/commits")
@@ -1122,3 +1081,125 @@ async def websocket_commits(websocket: WebSocket):
     except Exception:
         ws_manager.disconnect(websocket)
 
+
+# --- Pull Request Agent Endpoints --------------------------------------------
+
+class CompareBranchesRequest(BaseModel):
+    source_branch: str = Field(..., description="Source branch name")
+    destination_branch: str = Field(..., description="Destination branch name")
+
+class CreatePRRequest(BaseModel):
+    source_branch: str
+    destination_branch: str
+    created_by: str = "developer"
+    analysis: dict = Field(default_factory=dict)
+    changed_files: list[str] = Field(default_factory=list)
+
+class AdminReviewRequest(BaseModel):
+    action: str = Field(..., description="approve or reject")
+    comment: str = ""
+    reviewed_by: str = "admin"
+
+
+@app.get("/api/git/branches", tags=["Pull Request"], summary="List available git branches")
+def list_branches():
+    agent = PRAgent()
+    branches = agent.list_branches()
+    return {"branches": branches, "total": len(branches)}
+
+
+@app.post("/api/git/compare-branches", tags=["Pull Request"], summary="Compare two branches and run AI merge analysis")
+async def compare_branches(req: CompareBranchesRequest):
+    agent = PRAgent()
+    try:
+        logger.info("PR Agent: starting comparison %s -> %s", req.source_branch, req.destination_branch)
+        result = await agent.analyze_pr(req.source_branch, req.destination_branch)
+        logger.info("PR Agent Output:\n%s", json.dumps(result.get('analysis', {}), indent=2))
+        return result
+    finally:
+        await agent.close()
+
+
+@app.post("/api/pull-requests", tags=["Pull Request"], summary="Create a pull request for admin review")
+def create_pull_request(req: CreatePRRequest):
+    db: Session = SessionLocal()
+    try:
+        from .models import PullRequest
+        analysis = req.analysis
+        pr = PullRequest(
+            source_branch=req.source_branch,
+            destination_branch=req.destination_branch,
+            created_by=req.created_by,
+            ai_summary=analysis.get("summary", ""),
+            ai_conflicts=json.dumps(analysis.get("conflicts", [])),
+            ai_recommendations=json.dumps(analysis.get("recommendations", [])),
+            changed_files=json.dumps(req.changed_files),
+            files_changed=analysis.get("files_changed", len(req.changed_files)),
+            insertions=analysis.get("insertions", 0),
+            deletions=analysis.get("deletions", 0),
+            has_conflicts=analysis.get("has_conflicts", False),
+            status="pending",
+        )
+        db.add(pr)
+        db.commit()
+        db.refresh(pr)
+        logger.info("PR #%d created: %s -> %s by %s", pr.id, req.source_branch, req.destination_branch, req.created_by)
+        return {"success": True, "pr_id": pr.id, "message": f"Pull Request #{pr.id} created and sent for admin review."}
+    except Exception as exc:
+        db.rollback()
+        logger.error("PR creation error: %s", exc)
+        return {"success": False, "error": str(exc)}
+    finally:
+        db.close()
+
+
+@app.get("/api/pull-requests", tags=["Pull Request"], summary="List all pull requests")
+def list_pull_requests(status: str = None):
+    db: Session = SessionLocal()
+    try:
+        from .models import PullRequest
+        query = db.query(PullRequest).order_by(PullRequest.created_at.desc())
+        if status:
+            query = query.filter(PullRequest.status == status)
+        prs = query.all()
+        result = []
+        for pr in prs:
+            result.append({
+                "id": pr.id, "source_branch": pr.source_branch, "destination_branch": pr.destination_branch,
+                "status": pr.status, "created_by": pr.created_by, "has_conflicts": pr.has_conflicts,
+                "files_changed": pr.files_changed, "insertions": pr.insertions, "deletions": pr.deletions,
+                "ai_summary": pr.ai_summary,
+                "ai_conflicts": json.loads(pr.ai_conflicts) if pr.ai_conflicts else [],
+                "ai_recommendations": json.loads(pr.ai_recommendations) if pr.ai_recommendations else [],
+                "changed_files": json.loads(pr.changed_files) if pr.changed_files else [],
+                "admin_comment": pr.admin_comment, "reviewed_by": pr.reviewed_by,
+                "reviewed_at": pr.reviewed_at.isoformat() if pr.reviewed_at else None,
+                "created_at": pr.created_at.isoformat() if pr.created_at else None,
+            })
+        return {"pull_requests": result, "total": len(result)}
+    finally:
+        db.close()
+
+
+@app.put("/api/pull-requests/{pr_id}/review", tags=["Pull Request"], summary="Admin reviews a pull request")
+def review_pull_request(pr_id: int, req: AdminReviewRequest):
+    db: Session = SessionLocal()
+    try:
+        from .models import PullRequest
+        pr = db.query(PullRequest).filter(PullRequest.id == pr_id).first()
+        if not pr:
+            return {"success": False, "error": f"PR #{pr_id} not found"}
+        pr.status = "approved" if req.action == "approve" else "rejected"
+        pr.admin_comment = req.comment
+        pr.reviewed_by = req.reviewed_by
+        pr.reviewed_at = datetime.utcnow()
+        pr.updated_at = datetime.utcnow()
+        db.commit()
+        logger.info("PR #%d %s by %s: %s", pr_id, pr.status, req.reviewed_by, req.comment or "(no comment)")
+        return {"success": True, "pr_id": pr_id, "status": pr.status, "message": f"PR #{pr_id} has been {pr.status} by {req.reviewed_by}.", "admin_comment": pr.admin_comment}
+    except Exception as exc:
+        db.rollback()
+        logger.error("PR review error: %s", exc)
+        return {"success": False, "error": str(exc)}
+    finally:
+        db.close()

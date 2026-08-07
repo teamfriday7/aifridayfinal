@@ -23,6 +23,7 @@ const INITIAL_AGENTS: AgentBlock[] = [
   { id: 'kb_agent',       icon: 'KB',  label: 'Knowledge Base Agent', description: 'Extracts structured knowledge from changed files', status: 'idle' },
   { id: 'logic_analyzer', icon: 'LA',  label: 'LLM Logic Analyzer',   description: 'Checks logical flaws, enterprise guidelines & maintainability', status: 'idle' },
   { id: 'sonarcloud',     icon: 'SQ',  label: 'SonarCloud Scanner',   description: 'Static analysis: bugs, vulnerabilities, code smells', status: 'idle' },
+  { id: 'codebert_agent', icon: 'CB', label: 'CodeBERT Semantic',    description: 'Deep semantic analysis using CodeBERT embeddings & AST', status: 'idle' },
   { id: 'meta_analyzer',  icon: 'MA',  label: 'Meta-Analyzer',        description: 'Synthesizes all findings → composite quality score', status: 'idle' },
   { id: 'review_engine',  icon: 'RE',  label: 'Review Engine',        description: 'Generates suggested code fixes with original/suggested diff', status: 'idle' },
 ];
@@ -184,8 +185,8 @@ export function AgentPipeline() {
 
   const stageNodes = [
     { key: 'build', title: 'Dev Scan Stage', subtitle: 'Watcher & Knowledge', agents: [agents[0], agents[1]] },
-    { key: 'analysis', title: 'Test & Analysis', subtitle: 'Logic & SonarCloud', agents: [agents[2], agents[3]] },
-    { key: 'publish', title: 'Release Gate', subtitle: 'Meta & Fix Generator', agents: [agents[4], agents[5]] },
+    { key: 'analysis', title: 'Test & Analysis', subtitle: 'Logic, Sonar & CodeBERT', agents: [agents[2], agents[3], agents[4]] },
+    { key: 'publish', title: 'Release Gate', subtitle: 'Meta & Fix Generator', agents: [agents[5], agents[6]] },
   ];
 
   return (
