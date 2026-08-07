@@ -11,8 +11,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # CONFIGURATION
 # ==========================
 
-SONAR_HOST = "https://sonarcloud.io"
-SONAR_TOKEN = "sqp_58c979bd7a491d8039e840c13ed7cd93992d0b6a"
+SONAR_HOST = "http://localhost:9008"
+SONAR_TOKEN = "sqa_be206921f5c2dff1b55fcce78208f4c6d7ee7679"
 PROJECT_KEY = "teamfriday7_aifriday"
 
 # Local path to your Git repository

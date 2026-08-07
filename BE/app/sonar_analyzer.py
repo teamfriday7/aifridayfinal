@@ -421,9 +421,9 @@ async def get_sonar_analyzer_for_project(
             logger.warning("No active SonarCloud config found in DB")
             return None
         return SonarAnalyzer(
-            host=cfg.sonar_host,
-            token=cfg.sonar_token,
-            project_key=cfg.sonar_project_key,
+            host="http://localhost:9008/",
+            token="sqa_be206921f5c2dff1b55fcce78208f4c6d7ee7679",
+            project_key="teamfriday7_aifriday",
         )
     finally:
         db.close()

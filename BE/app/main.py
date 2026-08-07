@@ -32,6 +32,7 @@ from .auth import (
     verify_password,
 )
 from .database import SessionLocal, get_db, init_db
+from .notifications import send_review_email, send_slack_notification
 from .git_watcher import GitWatcherManager
 from .models import (
     AnalysisSummary, CodeReview, Commit, DeveloperScore, Project, User, SonarConfig,
@@ -140,7 +141,7 @@ def _seed_initial_data() -> None:
         sonar_cfg = SonarConfig(
             project_id=project.id,
             sonar_host="http://localhost:9008",
-            sonar_token="admin:Team@friday7",
+            sonar_token="sqa_be206921f5c2dff1b55fcce78208f4c6d7ee7679",
             sonar_project_key="teamfriday7_aifriday",
             is_active=True,
         )
@@ -299,6 +300,28 @@ async def lifespan(app: FastAPI):
 
             # Broadcast final analysis_complete event
             await ws_manager.broadcast(summary)
+            
+            # Send notifications (Slack & Email)
+            try:
+                # Async task in background - hardcoded email as requested
+                asyncio.create_task(send_review_email(
+                    to_email="jacob120802@gmail.com",
+                    repository="Enterprise Code Repo",
+                    risk_score=score
+                ))
+                
+                # Slack notification
+                severities = summary.get("by_severity", {})
+                critical_count = severities.get("critical", 0) + severities.get("high", 0)
+                asyncio.create_task(send_slack_notification(
+                    repository="Enterprise Code Repo",
+                    risk_score=score,
+                    issues_count=total_findings,
+                    critical_count=critical_count
+                ))
+            except Exception as e:
+                logger.error(f"Failed to trigger notifications: {e}")
+
             logger.info(
                 "✅  Full analysis done — commit %s, score=%s",
                 commit_info["hash"][:8],
