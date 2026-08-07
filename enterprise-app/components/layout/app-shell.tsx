@@ -10,6 +10,7 @@ const navItems = [
   { href: "/projects", label: "Repositories", hint: "source control" },
   { href: "/commits", label: "Commit History", hint: "activity feed" },
   { href: "/reviews", label: "Review Queue", hint: "AI findings" },
+  { href: "/leaderboard", label: "Leaderboard", hint: "developer quality" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -151,6 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 ["Repositories", "/projects"],
                 ["Commit History", "/commits"],
                 ["Reviews", "/reviews"],
+                ["Leaderboard", "/leaderboard"],
               ].map(([label, href]) => (
                 <Link
                   key={href}
