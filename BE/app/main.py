@@ -487,82 +487,134 @@ def list_reviews(
     }
 
 
+from .feedback_agent import FeedbackLearningEngine
+
+
+class ReviewFeedbackRequest(BaseModel):
+    reason: Optional[str] = Field("", description="Optional developer reason for feedback")
+    rule_category: Optional[str] = Field("general", description="Rule category e.g. naming, bug, style, security")
+
+
 @app.put(
     "/api/reviews/{review_id}/accept",
-    tags=["Reviews"], summary="Accept a review suggestion",
+    tags=["Reviews"], summary="Accept a review suggestion and record feedback",
 )
-def accept_review(review_id: int, db: Session = Depends(get_db)):
+def accept_review(review_id: int, req: Optional[ReviewFeedbackRequest] = None, db: Session = Depends(get_db)):
     review = db.query(CodeReview).filter(CodeReview.id == review_id).first()
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
     review.status = "accepted"
     db.commit()
-    return {"message": "Review accepted", "review_id": review_id}
+
+    category = (req.rule_category if req else None) or review.category or "general"
+    reason = (req.reason if req else "") or "Developer accepted suggestion"
+
+    FeedbackLearningEngine.record_feedback(
+        db=db,
+        action="accepted",
+        review_id=review_id,
+        rule_category=category,
+        reason=reason,
+    )
+    return {"message": "Review accepted and feedback recorded", "review_id": review_id}
 
 
 @app.put(
     "/api/reviews/{review_id}/reject",
-    tags=["Reviews"], summary="Reject a review suggestion",
+    tags=["Reviews"], summary="Reject a review suggestion and record feedback",
 )
-def reject_review(review_id: int, db: Session = Depends(get_db)):
+def reject_review(review_id: int, req: Optional[ReviewFeedbackRequest] = None, db: Session = Depends(get_db)):
     review = db.query(CodeReview).filter(CodeReview.id == review_id).first()
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
     review.status = "rejected"
     db.commit()
-    return {"message": "Review rejected", "review_id": review_id}
+
+    category = (req.rule_category if req else None) or review.category or "general"
+    reason = (req.reason if req else "") or "Developer rejected suggestion"
+
+    FeedbackLearningEngine.record_feedback(
+        db=db,
+        action="rejected",
+        review_id=review_id,
+        rule_category=category,
+        reason=reason,
+    )
+    return {"message": "Review rejected and feedback recorded", "review_id": review_id}
 
 
-# ─── Dashboard ─────────────────────────────────────────────────────────────────
+class DirectFeedbackRequest(BaseModel):
+    action: str = Field(..., description="'accepted' or 'rejected'")
+    rule_category: str = Field("general", description="Category e.g. naming, bare_except, self_assignment")
+    reason: Optional[str] = Field("", description="Feedback reason")
 
 
-@app.get("/api/dashboard/stats", tags=["Dashboard"], summary="Dashboard statistics")
-def dashboard_stats(db: Session = Depends(get_db)):
+@app.post(
+    "/api/codebert/feedback",
+    tags=["CodeBERT Agent"], summary="Submit direct accept/reject feedback for CodeBERT suggestions",
+)
+def record_codebert_feedback(req: DirectFeedbackRequest, db: Session = Depends(get_db)):
+    fb = FeedbackLearningEngine.record_feedback(
+        db=db,
+        action=req.action,
+        rule_category=req.rule_category,
+        reason=req.reason or "",
+    )
+    return {"message": "Feedback recorded", "feedback_id": fb.id}
+
+
+@app.get(
+    "/api/feedback/analytics",
+    tags=["Self-Learning Engine"], summary="Get feedback analytics & active self-learned rule adaptations",
+)
+def get_feedback_analytics(db: Session = Depends(get_db)):
+    return FeedbackLearningEngine.get_learned_preferences(db)
+
+
+@app.post("/api/codebert/analyze", tags=["CodeBERT Agent"], summary="Perform CodeBERT semantic analysis & LLM review comment generation")
+def codebert_analyze(req: CodeAnalyzeRequest, db: Session = Depends(get_db)):
+    learned_prefs = FeedbackLearningEngine.get_learned_preferences(db)
+    semantics = codebert_analyzer.analyze_semantics(req.code)
+
+    # Apply self-learned suppressions to findings
+    filtered_semantics = FeedbackLearningEngine.filter_findings_with_learning(semantics, learned_prefs)
+    review_comment = LLMReviewSynthesizer.generate_review_comment(filtered_semantics, None, learned_prefs)
+
+    response = {
+        "embedding": semantics["embedding"],
+        "embedding_dim": semantics["embedding_dim"],
+        "code_smells": filtered_semantics["code_smells"],
+        "poor_naming": filtered_semantics["poor_naming"],
+        "bug_prone_patterns": filtered_semantics["bug_prone_patterns"],
+        "function_semantics": semantics["function_semantics"],
+        "metrics": semantics["metrics"],
+        "learned_preferences": learned_prefs,
+        "review_comment": review_comment,
+    }
+
+    if req.compare_code:
+        response["similarity_score"] = codebert_analyzer.estimate_similarity(req.code, req.compare_code)
+
+    if req.snippets:
+        response["duplicate_logic"] = codebert_analyzer.find_duplicate_logic(req.snippets)
+
+    return response
+
+
+@app.post("/api/codebert/diff", tags=["CodeBERT Agent"], summary="Perform CodeBERT diff comparison, risk analysis & LLM review comment generation")
+def codebert_diff(req: CodeDiffRequest, db: Session = Depends(get_db)):
+    learned_prefs = FeedbackLearningEngine.get_learned_preferences(db)
+    diff_analysis = codebert_analyzer.compare_diff(req.old_code, req.new_code)
+    semantics = codebert_analyzer.analyze_semantics(req.new_code)
+
+    filtered_semantics = FeedbackLearningEngine.filter_findings_with_learning(semantics, learned_prefs)
+    review_comment = LLMReviewSynthesizer.generate_review_comment(filtered_semantics, diff_analysis, learned_prefs)
+
     return {
-        "total_commits": db.query(Commit).count(),
-        "total_reviews": db.query(CodeReview).count(),
-        "total_projects": db.query(Project).count(),
-        "total_developers": db.query(User).filter(User.role == "developer").count(),
-        "pending_reviews": db.query(CodeReview).filter(
-            CodeReview.status == "pending",
-        ).count(),
-        "active_watchers": len(watcher_manager.watchers),
-        "ws_connections": len(ws_manager.active_connections),
+        "diff_analysis": diff_analysis,
+        "new_code_semantics": filtered_semantics,
+        "learned_preferences": learned_prefs,
+        "review_comment": review_comment,
     }
 
 
-# ─── Users (admin) ─────────────────────────────────────────────────────────────
-
-
-@app.get("/api/users", tags=["Users"], summary="List all users")
-def list_users(db: Session = Depends(get_db)):
-    users = db.query(User).all()
-    return [
-        {
-            "id": u.id,
-            "username": u.username,
-            "email": u.email,
-            "full_name": u.full_name,
-            "role": u.role,
-            "is_active": u.is_active,
-            "created_at": u.created_at.isoformat(),
-        }
-        for u in users
-    ]
-
-
-# ─── WebSocket — real-time commit feed ─────────────────────────────────────────
-
-
-@app.websocket("/ws/commits")
-async def websocket_commits(websocket: WebSocket):
-    await ws_manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            if data == "ping":
-                await websocket.send_json({"type": "pong"})
-    except WebSocketDisconnect:
-        ws_manager.disconnect(websocket)
-    except Exception:
-        ws_manager.disconnect(websocket)
