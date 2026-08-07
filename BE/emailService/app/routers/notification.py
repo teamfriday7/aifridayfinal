@@ -8,6 +8,10 @@ from app.services.email_service import send_email
 from app.models.notification import SlackRequest
 from app.services.slack_service import send_slack_message
 
+from app.models.notification import SecurityAlertRequest
+from app.services.slack_service import send_security_alert
+
+
 
 router = APIRouter()
 
@@ -71,3 +75,18 @@ def email_notification(
 def slack_notification(request: SlackRequest):
 
     return send_slack_message(request.message)
+
+@router.post("/security-alert")
+def security_alert(request: SecurityAlertRequest):
+
+    return send_security_alert(
+
+        repository=request.repository,
+
+        risk_score=request.risk_score,
+
+        severity=request.severity,
+
+        issue=request.issue,
+
+    )
