@@ -1,0 +1,135 @@
+"""Enterprise Code Analysis — SQLAlchemy ORM models."""
+from __future__ import annotations
+
+import enum
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text,
+)
+from sqlalchemy.orm import relationship
+
+from .database import Base
+
+
+# ─── Enums ──────────────────────────────────────────────────────────────────────
+
+
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"
+    DEVELOPER = "developer"
+
+
+class AnalysisStatus(str, enum.Enum):
+    PENDING = "pending"
+    ANALYZING = "analyzing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ReviewStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class Severity(str, enum.Enum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    INFO = "info"
+
+
+# ─── Models ─────────────────────────────────────────────────────────────────────
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    email = Column(String(100), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(100), default="")
+    role = Column(String(20), default=UserRole.DEVELOPER.value)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    scores = relationship("DeveloperScore", back_populates="user")
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    repo_path = Column(String(500), nullable=False)
+    description = Column(Text, default="")
+    is_active = Column(Boolean, default=True)
+    last_watched_commit = Column(String(40), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    commits = relationship("Commit", back_populates="project")
+
+
+class Commit(Base):
+    __tablename__ = "commits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    hash = Column(String(40), unique=True, nullable=False, index=True)
+    author_name = Column(String(100), default="")
+    author_email = Column(String(100), default="")
+    message = Column(Text, default="")
+    timestamp = Column(DateTime, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    files_changed = Column(Integer, default=0)
+    insertions = Column(Integer, default=0)
+    deletions = Column(Integer, default=0)
+    analysis_status = Column(String(20), default=AnalysisStatus.PENDING.value)
+    diff_content = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="commits")
+    reviews = relationship("CodeReview", back_populates="commit")
+
+
+class CodeReview(Base):
+    __tablename__ = "code_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    commit_id = Column(Integer, ForeignKey("commits.id"), nullable=False)
+    agent_type = Column(String(50), default="")
+    severity = Column(String(20), default=Severity.INFO.value)
+    file_path = Column(String(500), default="")
+    line_start = Column(Integer, nullable=True)
+    line_end = Column(Integer, nullable=True)
+    category = Column(String(50), default="")          # bug, security, style, performance
+    title = Column(String(200), default="")
+    message = Column(Text, default="")
+    suggestion = Column(Text, nullable=True)
+    original_code = Column(Text, nullable=True)
+    suggested_code = Column(Text, nullable=True)
+    status = Column(String(20), default=ReviewStatus.PENDING.value)
+    confidence = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    commit = relationship("Commit", back_populates="reviews")
+
+
+class DeveloperScore(Base):
+    __tablename__ = "developer_scores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    code_quality_score = Column(Float, default=0.0)
+    consistency_score = Column(Float, default=0.0)
+    security_score = Column(Float, default=0.0)
+    learning_velocity = Column(Float, default=0.0)
+    overall_rating = Column(Float, default=0.0)
+    total_commits = Column(Integer, default=0)
+    total_issues = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="scores")
