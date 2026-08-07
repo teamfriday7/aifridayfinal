@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  Badge,
+  Card,
+  CardHeader,
+  Divider,
+  Spinner,
+  Text,
+  Title2,
+  Title3,
+} from "@fluentui/react-components";
 import { AppShell } from "@/components/layout/app-shell";
 import { MetricCard } from "@/components/metric-card";
 import { AgentPipeline } from "@/components/agent-pipeline";
@@ -33,162 +43,145 @@ function DashboardPage() {
   }, []);
 
   const severityColor = (s: string) =>
-    s === "critical" ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
-    : s === "high" ? "border-orange-400/30 bg-orange-400/10 text-orange-300"
-    : s === "medium" ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-    : "border-slate-500/30 bg-slate-500/10 text-slate-400";
+    s === "critical" ? "danger"
+    : s === "high" ? "warning"
+    : s === "medium" ? "informative"
+    : "brand";
 
   const statusColor = (s: string) =>
-    s === "completed" ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
-    : s === "pending" ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-200"
-    : "border-cyan-400/20 bg-cyan-400/10 text-cyan-200";
+    s === "completed" ? "success"
+    : s === "pending" ? "warning"
+    : "brand";
 
   const scoreColor = (s: number) =>
-    s >= 85 ? "text-emerald-400" : s >= 70 ? "text-yellow-400" : s >= 50 ? "text-orange-400" : "text-rose-500";
+    s >= 85 ? "success" : s >= 70 ? "warning" : s >= 50 ? "informative" : "danger";
 
   return (
     <AppShell>
-      {/* Hero */}
-      <section className="glass-panel rounded-[30px] p-6 sm:p-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      {/* Top Azure DevOps Dashboard Welcome Card */}
+      <div className="ado-card">
+        <div className="ado-card-header flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.35em] text-cyan-400">Engineering command center</p>
-            <h2 className="mt-2 text-3xl font-semibold text-[color:var(--text)]">
+            <div className="flex items-center gap-2">
+              <Badge appearance="filled" color="brand">Overview Hub</Badge>
+              <Text size={200} style={{ color: "var(--muted)" }}>Org: AI Friday Org</Text>
+            </div>
+            <h2 className="mt-1 text-xl font-bold text-[color:var(--text)]">
               Welcome back, {user?.full_name ?? user?.username}
             </h2>
-            <p className="mt-2 max-w-2xl text-sm text-[color:var(--muted)]">
-              Three AI agents analyse every commit in parallel — SonarCloud, Knowledge Base Agent, and LLM Logic Analyzer — then a Meta-Analyzer synthesises their findings into actionable review suggestions.
-            </p>
+            <Text size={200} style={{ display: "block", marginTop: 4, opacity: 0.85 }}>
+              Three AI agents analyze every commit in parallel, synthesizing findings into automated pull request suggestions.
+            </Text>
           </div>
-          <div className="flex flex-col gap-2 text-right">
-            <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-200">
-              🔴 Live feed • backend WebSocket active
-            </div>
+          <div className="flex items-center gap-3">
+            <Badge appearance="tint" color="informative">WebSocket Active</Badge>
             {stats?.avg_composite_score !== undefined && (
-              <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 px-4 py-2 text-sm">
-                Avg quality score: <span className={`font-bold ${scoreColor(stats.avg_composite_score)}`}>{stats.avg_composite_score}/100</span>
-              </div>
+              <Badge appearance="filled" color={scoreColor(stats.avg_composite_score)}>
+                Avg Quality: {stats.avg_composite_score}/100
+              </Badge>
             )}
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 xl:grid-cols-5">
-          <MetricCard label="Commits" value={stats?.total_commits ?? 0} detail="repository activity" />
+        <div className="p-4 grid gap-3 grid-cols-2 md:grid-cols-5">
+          <MetricCard label="Total Commits" value={stats?.total_commits ?? 0} detail="repository commits" />
           <MetricCard label="Pending Reviews" value={stats?.pending_reviews ?? 0} detail="awaiting action" />
-          <MetricCard label="Accepted" value={stats?.accepted_reviews ?? 0} detail="fixes applied" />
-          <MetricCard label="Watchers" value={stats?.active_watchers ?? 0} detail="active repos" />
-          <MetricCard label="Developers" value={stats?.total_developers ?? 0} detail="tracked" />
+          <MetricCard label="Fixes Accepted" value={stats?.accepted_reviews ?? 0} detail="auto-committed" />
+          <MetricCard label="Active Repos" value={stats?.active_watchers ?? 0} detail="live watchers" />
+          <MetricCard label="Developers" value={stats?.total_developers ?? 0} detail="team velocity" />
         </div>
-      </section>
+      </div>
 
-      {/* Main grid — Agent Pipeline + Review Queue */}
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        {/* Agent Pipeline — HERO section for judges */}
-        <div className="glass-panel rounded-[30px] p-6">
+      {/* Main Grid: Pipelines & Review Queue */}
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="ado-card p-4">
           <AgentPipeline />
         </div>
 
-        {/* Review queue */}
-        <div className="glass-panel rounded-[30px] p-6">
-          <div className="flex items-center justify-between">
+        <div className="ado-card flex flex-col">
+          <div className="ado-card-header flex items-center justify-between">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.35em] text-cyan-400">Latest findings</p>
-              <h3 className="mt-1 text-xl font-semibold text-[color:var(--text)]">Review queue</h3>
+              <h3 className="text-sm font-bold text-[color:var(--text)]">Review Queue</h3>
+              <Text size={100} style={{ color: "var(--muted)" }}>Recent findings from AI analysis</Text>
             </div>
-            <div className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-sm text-amber-200">
-              {stats?.pending_reviews ?? 0} pending
-            </div>
+            <Badge appearance="filled" color="warning">{stats?.pending_reviews ?? 0} pending</Badge>
           </div>
-          <div className="mt-5 space-y-3">
-            {loading
-              ? [...Array(4)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-2xl bg-slate-800/70" />)
-              : reviews.length === 0
-              ? <p className="text-sm text-slate-500 italic">No reviews yet — push a commit to trigger analysis.</p>
-              : reviews.map((review) => (
-                <div key={review.id} className={`rounded-2xl border-l-2 p-4 soft-card ${severityColor(review.severity).split(' ')[0]}`}>
-                  <div className="flex items-start justify-between gap-3">
+
+          <div className="p-4 flex-1 space-y-3">
+            {loading ? (
+              <div className="py-8 text-center"><Spinner label="Loading review queue" /></div>
+            ) : reviews.length === 0 ? (
+              <Text size={200}>No pending reviews. Push a commit to trigger analysis.</Text>
+            ) : (
+              reviews.map((review) => (
+                <div key={review.id} className="soft-card p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-[color:var(--text)]">{review.title}</p>
-                      <p className="mt-1 text-xs text-[color:var(--muted)] truncate">{review.file_path || "no file"}</p>
+                      <p className="text-xs font-semibold text-[color:var(--text)] truncate">{review.title}</p>
+                      <p className="text-[11px] font-mono text-[color:var(--muted)] truncate mt-0.5">{review.file_path || "Root"}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-widest ${severityColor(review.severity)}`}>
-                        {review.severity}
-                      </span>
-                      <span className="text-[10px] text-slate-500">{review.agent_type}</span>
-                    </div>
+                    <Badge appearance="filled" color={severityColor(review.severity)} size="small">{review.severity}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-[color:var(--muted)]">
+                    <span>{review.agent_type}</span>
+                    <span className="font-mono">#{review.commit_id}</span>
                   </div>
                 </div>
-              ))}
+              ))
+            )}
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* Repositories + Recent Commits */}
-      <section className="grid gap-6 xl:grid-cols-2">
-        {/* Repositories */}
-        <div className="glass-panel rounded-[30px] p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.35em] text-cyan-400">Tracked repositories</p>
-              <h3 className="mt-1 text-xl font-semibold text-[color:var(--text)]">Workspace health</h3>
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-[color:var(--muted)]">
-              {projects.length} connected
-            </div>
+      {/* Bottom Grid: Repositories & Recent Commits */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="ado-card">
+          <div className="ado-card-header flex items-center justify-between">
+            <h3 className="text-sm font-bold text-[color:var(--text)]">Tracked Repositories</h3>
+            <Badge appearance="tint" color="informative">{projects.length} connected</Badge>
           </div>
-          <div className="mt-5 space-y-3">
+          <div className="p-4 space-y-3">
             {projects.map((project) => (
-              <div key={project.id} className="soft-card rounded-2xl p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-[color:var(--text)]">{project.name}</p>
-                    <p className="mt-1 text-sm text-[color:var(--muted)]">{project.description || "No description provided"}</p>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs uppercase tracking-[0.2em] ${
-                    project.is_watching
-                      ? "border border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
-                      : "border border-slate-500/20 bg-slate-500/10 text-slate-300"
-                  }`}>
-                    {project.is_watching ? "🔴 watching" : "idle"}
-                  </span>
+              <div key={project.id} className="soft-card p-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-[color:var(--text)]">{project.name}</p>
+                  <p className="text-[11px] text-[color:var(--muted)] mt-0.5">{project.description || "No description"}</p>
+                  <p className="text-[10px] font-mono text-[color:var(--accent)] mt-1">{project.repo_path}</p>
                 </div>
-                <p className="mt-3 font-mono text-xs text-slate-600">{project.repo_path}</p>
+                <Badge appearance="filled" color={project.is_watching ? "success" : "subtle"} size="small">
+                  {project.is_watching ? "Watching" : "Idle"}
+                </Badge>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Recent commits */}
-        <div className="glass-panel rounded-[30px] p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.35em] text-cyan-400">Commit activity</p>
-              <h3 className="mt-1 text-xl font-semibold text-[color:var(--text)]">Recent commits</h3>
-            </div>
+        <div className="ado-card">
+          <div className="ado-card-header flex items-center justify-between">
+            <h3 className="text-sm font-bold text-[color:var(--text)]">Recent Commits</h3>
+            <Text size={100} style={{ color: "var(--muted)" }}>Trigger history</Text>
           </div>
-          <div className="mt-5 space-y-3">
-            {loading
-              ? [...Array(4)].map((_, i) => <div key={i} className="h-14 animate-pulse rounded-2xl bg-slate-800/70" />)
-              : commits.map((c) => (
-                <div key={c.hash} className="soft-card rounded-2xl p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-[color:var(--text)]">{c.message}</p>
-                      <p className="mt-0.5 text-xs text-[color:var(--muted)]">
-                        {c.author_name} · <code className="text-cyan-400">{c.hash.slice(0, 8)}</code>
-                        {c.files_changed > 0 && ` · ${c.files_changed} files`}
-                      </p>
-                    </div>
-                    <span className={`flex-shrink-0 rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.15em] ${statusColor(c.analysis_status)}`}>
-                      {c.analysis_status}
-                    </span>
+          <div className="p-4 space-y-3">
+            {loading ? (
+              <div className="py-8 text-center"><Spinner label="Loading commits" /></div>
+            ) : commits.map((commit) => (
+              <div key={commit.hash} className="soft-card p-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-[color:var(--text)] truncate">{commit.message}</p>
+                  <div className="flex items-center gap-2 text-[11px] text-[color:var(--muted)] mt-1">
+                    <span>{commit.author_name}</span>
+                    <span>•</span>
+                    <span className="font-mono text-[color:var(--accent)]">{commit.hash.slice(0, 8)}</span>
                   </div>
                 </div>
-              ))}
+                <Badge appearance="filled" color={statusColor(commit.analysis_status)} size="small">
+                  {commit.analysis_status}
+                </Badge>
+              </div>
+            ))}
           </div>
         </div>
-      </section>
+      </div>
     </AppShell>
   );
 }
@@ -196,3 +189,4 @@ function DashboardPage() {
 export default function DashboardRoute() {
   return <DashboardPage />;
 }
+

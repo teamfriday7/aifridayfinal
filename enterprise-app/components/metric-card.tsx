@@ -1,9 +1,10 @@
+import { Card, CardHeader, Text, Title3 } from "@fluentui/react-components";
+
 export function MetricCard({ label, value, detail }: { label: string; value: string | number; detail: string }) {
   return (
-    <div className="soft-card rounded-[22px] p-4">
-      <p className="text-sm text-[color:var(--muted)]">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{value}</p>
-      <p className="mt-1 text-sm text-[color:var(--muted)]">{detail}</p>
-    </div>
+    <Card appearance="filled" style={{ minHeight: 112 }}>
+      <CardHeader header={<Text size={200}>{label}</Text>} description={<Title3>{value}</Title3>} />
+      <Text size={200}>{detail}</Text>
+    </Card>
   );
 }
