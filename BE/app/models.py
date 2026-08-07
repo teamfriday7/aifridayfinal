@@ -115,6 +115,22 @@ class CodeReview(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     commit = relationship("Commit", back_populates="reviews")
+    feedbacks = relationship("ReviewFeedback", back_populates="review", cascade="all, delete-orphan")
+
+
+class ReviewFeedback(Base):
+    __tablename__ = "review_feedbacks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    review_id = Column(Integer, ForeignKey("code_reviews.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action = Column(String(20), nullable=False)  # "accepted" or "rejected"
+    rule_category = Column(String(100), default="general")
+    reason = Column(Text, default="")
+    pattern_signature = Column(String(255), default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    review = relationship("CodeReview", back_populates="feedbacks")
 
 
 class DeveloperScore(Base):

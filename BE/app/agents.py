@@ -26,6 +26,11 @@ class AgentState:
     reasoning: str = ""
     validation: dict[str, Any] = field(default_factory=dict)
     failures: list[str] = field(default_factory=list)
+    # CodeBERT Semantic Agent Layer fields
+    code_analysis_input: str | None = None
+    old_code: str | None = None
+    codebert_findings: dict[str, Any] | None = None
+    code_review_comment: str | None = None
 
 
 class Agent(Protocol):
@@ -147,6 +152,9 @@ class ValidatorAgent:
         return state
 
 
+from .codebert_agent import CodeBERTAgent
+
+
 class ReportAgent:
     """Produces a UI/API-ready response. Add PDF/chart/export renderers here."""
 
@@ -162,6 +170,8 @@ class ReportAgent:
             "intent": {"name": state.intent, "entities": state.entities, "business_action": state.business_action},
             "workflow": state.plan,
             "ml_result": state.ml_result,
+            "codebert_findings": state.codebert_findings,
+            "code_review_comment": state.code_review_comment,
             "validation": state.validation,
             "sources": state.knowledge,
             "failures": state.failures,
@@ -174,17 +184,19 @@ class CoordinatorAgent:
     def __init__(self, rag: RAGPipeline, ml_model: MLModel | None = None) -> None:
         self.agents: dict[str, Agent] = {
             "intent": IntentAgent(), "planning": PlanningAgent(), "knowledge": KnowledgeAgent(rag),
-            "ml": MLAgent(ml_model), "reasoning": ReasoningAgent(rag),
+            "ml": MLAgent(ml_model), "codebert": CodeBERTAgent(), "reasoning": ReasoningAgent(rag),
             "validator": ValidatorAgent(), "report": ReportAgent(),
         }
 
-    def execute(self, query: str, session_id: str, document_ids: list[str] | None = None) -> dict[str, Any]:
-        state = AgentState(query=query, session_id=session_id, document_ids=document_ids)
+    def execute(self, query: str, session_id: str, document_ids: list[str] | None = None, code_analysis_input: str | None = None, old_code: str | None = None) -> dict[str, Any]:
+        state = AgentState(query=query, session_id=session_id, document_ids=document_ids, code_analysis_input=code_analysis_input, old_code=old_code)
         # Planning must run immediately after intent to determine the remaining route.
         for name in ("intent", "planning"):
             state = self._run(name, state)
         for name in state.plan[2:]:
             state = self._run(name, state)
+        # Execute CodeBERT agent step
+        state = self._run("codebert", state)
         return ReportAgent.format(state)
 
     def _run(self, name: str, state: AgentState) -> AgentState:
