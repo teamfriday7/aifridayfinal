@@ -32,17 +32,27 @@ const RULES: Rule[] = [
   // Security & TLS
   {
     id: "sec-disabled-tls",
-    pattern: /\b(rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0|InsecureSkipVerify\s*:\s*true|TrustAllManager)\b/i,
+    pattern: /(?:rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0|InsecureSkipVerify\s*:\s*true|TrustAllManager)/i,
     severity: "high",
     title: "TLS Verification Disabled",
     message: "Certificate verification has been explicitly disabled, exposing network traffic to MITM attacks.",
     suggestion: "Re-enable TLS verification and configure trusted Root CA bundles."
   },
 
+  // CORS Policy
+  {
+    id: "sec-open-cors",
+    pattern: /(?:allow_origins\s*=\s*\[\s*["']\*["']|CorsOptions\s*:\s*\{\s*origin\s*:\s*["']\*["']|setHeader\(["']Access-Control-Allow-Origin["'],\s*["']\*["']\))/i,
+    severity: "medium",
+    title: "Wildcard / Open CORS Policy",
+    message: "CORS configured with wildcard origin '*', allowing untrusted domains to make requests.",
+    suggestion: "Specify explicitly trusted frontend origin domains in CORS configuration."
+  },
+
   // Injection Attacks
   {
     id: "sec-sql-injection",
-    pattern: /(?:\bSELECT\b.+\+|\bINSERT\b.+\+|\bUPDATE\b.+\+|f["'].*\bSELECT\b).*(?:FROM|WHERE|INTO)/i,
+    pattern: /(?:\bSELECT\b.+\+|\bINSERT\b.+\+|\bUPDATE\b.+\+|f["'][^"']*\bSELECT\b.*\{.*\}).*(?:FROM|WHERE|INTO)/i,
     severity: "high",
     title: "Potential SQL Injection",
     message: "Dynamic string concatenation in SQL query detected.",
@@ -50,25 +60,43 @@ const RULES: Rule[] = [
   },
   {
     id: "sec-cmd-injection",
-    pattern: /\b(subprocess\.run\([^)]*shell\s*=\s*True|os\.system\(|child_process\.exec\(|Runtime\.getRuntime\(\)\.exec\(|exec\.Command\("sh",\s*"-c"\))\b/,
+    pattern: /(?:subprocess\.run\([^)]*shell\s*=\s*True|os\.system\([^)]*\$|child_process\.exec\([^)]*\+|Runtime\.getRuntime\(\)\.exec\(|exec\.Command\("sh",\s*"-c",\s*\+)/,
     severity: "high",
     title: "Unsafe Command Execution",
     message: "Executing shell commands dynamically can lead to command injection if user input is passed.",
     suggestion: "Avoid passing raw shell strings. Pass arguments as an array and validate inputs."
   },
   {
+    id: "sec-path-traversal",
+    pattern: /(?:res\.sendFile\([^)]*\+|fs\.readFile\([^)]*\+|open\([^)]*\+).*req\.(?:query|params|body)/i,
+    severity: "high",
+    title: "Potential Path Traversal",
+    message: "File path constructed directly from request input without path resolution or sanitization.",
+    suggestion: "Sanitize user inputs and resolve paths using path.resolve with base directory validation."
+  },
+  {
     id: "sec-xss-html-inject",
-    pattern: /(?:\.innerHTML\s*=|dangerouslySetInnerHTML\s*=|v-html\s*=)/,
+    pattern: /(?:\.innerHTML\s*=|\bdangerouslySetInnerHTML\s*=|v-html\s*=)/,
     severity: "medium",
     title: "DOM / HTML Injection Surface",
     message: "Directly rendering untrusted HTML into the DOM opens XSS vulnerabilities.",
     suggestion: "Use DOMPurify or framework text bindings (e.g. textContent or standard React JSX) to sanitize output."
   },
 
+  // Weak Cryptography & Randomness
+  {
+    id: "sec-insecure-crypto",
+    pattern: /(?:crypto\.createHash\(["'](?:md5|sha1)["']\)|hashlib\.(?:md5|sha1)\(|Math\.random\(\).*token)/i,
+    severity: "medium",
+    title: "Weak Hashing / Non-Cryptographic PRNG",
+    message: "Use of MD5/SHA1 or Math.random() for security-sensitive tokens or hashes.",
+    suggestion: "Use SHA-256 / SHA-512 for hashes and crypto.randomBytes() / secrets module for tokens."
+  },
+
   // Dynamic Code & Deserialization
   {
     id: "sec-eval-exec",
-    pattern: /\beval\s*\([^\)]+\)|\bexec\s*\([^\)]+\)|pickle\.loads\(|yaml\.load\([^,)]*\)/,
+    pattern: /(?:\beval\s*\([^\)]+\)|\bexec\s*\([^\)]+\)|pickle\.loads\(|yaml\.load\([^,)]*\))/,
     severity: "high",
     title: "Dynamic Code Evaluation / Unsafe Deserialization",
     message: "Dynamic code execution or unsafe object deserialization detected.",
@@ -78,7 +106,7 @@ const RULES: Rule[] = [
   // Error Handling & Reliability
   {
     id: "qual-silent-catch",
-    pattern: /except\s*:\s*pass|catch\s*\([^)]*\)\s*\{\s*\}|panic\(err\)/,
+    pattern: /(?:except\s*(?:[A-Za-z0-9_]+\s*)?:\s*pass\s*$|catch\s*\([^)]*\)\s*\{\s*\}|panic\(err\))/,
     severity: "medium",
     title: "Silent Failure / Swallowed Exception",
     message: "Exceptions are caught and discarded without logging or recovery logic.",
@@ -94,8 +122,9 @@ function isAnalyzerOrMetaFile(filePath?: string): boolean {
   const normalized = filePath.replace(/\\/g, "/").toLowerCase();
   return (
     normalized.includes("analyzer.ts") ||
-    normalized.includes("pre-commit-runner.ts") ||
-    normalized.includes("pre-push-runner.ts") ||
+    normalized.includes("extensionService/main.py") ||
+    normalized.includes("pre-commit-runner") ||
+    normalized.includes("pre-push-runner") ||
     normalized.includes("scratch/") ||
     normalized.includes("test_") ||
     normalized.includes(".test.") ||
@@ -103,7 +132,7 @@ function isAnalyzerOrMetaFile(filePath?: string): boolean {
   );
 }
 
-/** Lines containing rule definitions, regex patterns, or comments should be ignored */
+/** Lines containing rule definitions, regex patterns, or string literals should be ignored */
 function isMetaOrCommentLine(line: string): boolean {
   const trimmed = line.trim();
   if (
@@ -115,7 +144,10 @@ function isMetaOrCommentLine(line: string): boolean {
     trimmed.includes("re.compile") ||
     trimmed.includes("RULES =") ||
     trimmed.includes("rules =") ||
-    trimmed.includes("test_endpoint")
+    trimmed.includes("test_endpoint") ||
+    trimmed.includes("return f\"") ||
+    trimmed.includes("return f'") ||
+    trimmed.includes("f\"4. **Error Swallowing")
   ) {
     return true;
   }

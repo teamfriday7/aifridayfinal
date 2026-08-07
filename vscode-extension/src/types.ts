@@ -68,12 +68,18 @@ export interface ChatRequest {
   gitDiff?: string;
   projectManifest?: string;
   findings?: Finding[];
+  stream?: boolean;
 }
 
 export interface ChatResponse {
   reply: string;
   suggestedActions?: string[];
   patchDiff?: string;
+}
+
+export interface StreamChunk {
+  delta: string;
+  done: boolean;
 }
 
 export interface ReviewSession {
@@ -95,3 +101,10 @@ export interface ChangedFileItem {
   findingCount: number;
   hasBlocking: boolean;
 }
+
+export interface FindingFilter {
+  severity?: Severity | "all";
+  status?: FindingStatus | "all";
+  searchQuery?: string;
+}
+

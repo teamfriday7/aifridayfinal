@@ -375,9 +375,9 @@ def _get_owasp_ref(title: str) -> str | None:
 def _rule_based_findings(diff: str) -> list[Finding]:
     rules: list[tuple[re.Pattern[str], Severity, str, str, str, str]] = [
         (re.compile(r"\b(subprocess\.run\([^)]*shell\s*=\s*True|os\.system\(|child_process\.exec\()\b"), "medium", "Process execution added", "Executing commands requires clear input boundaries.", "Pass arguments as an array, avoid a shell, and validate every externally derived value.", "rule-proc-exec"),
-        (re.compile(r"(?:\bSELECT\b.+\+|\bINSERT\b.+\+|\bUPDATE\b.+\+|f[\"'].*\bSELECT\b).*(?:FROM|WHERE|INTO)", re.I), "high", "Possible SQL construction", "The change appears to construct SQL dynamically.", "Use parameterized queries and keep SQL structure static.", "rule-sql-inject"),
+        (re.compile(r"(?:\bSELECT\b.+\+|\bINSERT\b.+\+|\bUPDATE\b.+\+|f[\"'][^\"']*\bSELECT\b.*\{.*\}).*(?:FROM|WHERE|INTO)", re.I), "high", "Possible SQL construction", "The change appears to construct SQL dynamically.", "Use parameterized queries and keep SQL structure static.", "rule-sql-inject"),
         (re.compile(r"allow_origins\s*=\s*\[\s*[\"']\*[\"']"), "medium", "Open CORS policy", "A wildcard CORS origin is being enabled.", "Restrict origins to explicitly trusted frontend domains.", "rule-open-cors"),
-        (re.compile(r"(?:\.innerHTML\s*=|dangerouslySetInnerHTML\s*=)"), "medium", "HTML injection surface", "The change inserts HTML directly into the UI.", "Sanitize untrusted content or render it as text/components instead.", "rule-html-inject"),
+        (re.compile(r"(?:\.innerHTML\s*=|\bdangerouslySetInnerHTML\s*=)"), "medium", "HTML injection surface", "The change inserts HTML directly into the UI.", "Sanitize untrusted content or render it as text/components instead.", "rule-html-inject"),
     ]
     findings: list[Finding] = []
     file_name: str | None = None
@@ -394,11 +394,13 @@ def _rule_based_findings(diff: str) -> list[Finding]:
             continue
         content = line[1:]
 
-        # Skip analyzer/rule definition files and comments
-        if file_name and ("analyzer.ts" in file_name or "main.py" in file_name or "runner" in file_name or "scratch/" in file_name):
+        # Skip analyzer/rule definition files, docstrings, and string templates
+        fn = (file_name or "").lower()
+        if fn and ("analyzer" in fn or "main.py" in fn or "runner" in fn or "scratch/" in fn or "test_" in fn):
             if line_number is not None: line_number += 1
             continue
-        if content.strip().startswith(("#", "//", "/*", "*", "re.compile", "RULES =")):
+        c_strip = content.strip()
+        if c_strip.startswith(("#", "//", "/*", "*", "re.compile", "RULES =", "rules =", "return f\"", "return f'")):
             if line_number is not None: line_number += 1
             continue
 

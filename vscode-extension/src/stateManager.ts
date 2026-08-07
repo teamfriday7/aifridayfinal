@@ -139,8 +139,44 @@ export class ReviewStateManager {
     }
   }
 
+  public getFilteredFindings(filter?: { severity?: string; status?: string; searchQuery?: string }): Finding[] {
+    let list = this.activeFindings;
+    if (!filter) return list;
+
+    if (filter.severity && filter.severity !== "all") {
+      list = list.filter((f) => f.severity === filter.severity);
+    }
+
+    if (filter.status && filter.status !== "all") {
+      list = list.filter((f) => (f.status ?? "open") === filter.status);
+    }
+
+    if (filter.searchQuery && filter.searchQuery.trim()) {
+      const q = filter.searchQuery.toLowerCase();
+      list = list.filter(
+        (f) =>
+          f.title.toLowerCase().includes(q) ||
+          f.message.toLowerCase().includes(q) ||
+          f.suggestion.toLowerCase().includes(q) ||
+          (f.file && f.file.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }
+
+  public resetIgnoredKeys(): void {
+    this._ignoredKeys.clear();
+    if (this._context) {
+      void this._context.workspaceState.update("codeguardian.ignoredKeys", []);
+    }
+    void this.syncIgnoredKeysToGitHooks();
+    this._onDidChangeState.fire();
+  }
+
   public clear(): void {
     this._activeFindings = [];
     this._onDidChangeState.fire();
   }
 }
+

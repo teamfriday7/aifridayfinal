@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as vscode from "vscode";
-import { findGitRoot, stagedDiff, unpushedDiff } from "./git";
+import { findGitRoot, git, stagedDiff, unpushedDiff } from "./git";
 import { ReviewStateManager } from "./stateManager";
 
 export interface WorkspaceContext {
@@ -10,8 +10,10 @@ export interface WorkspaceContext {
   selection?: string;
   projectManifest?: string;
   gitDiff?: string;
+  branchName?: string;
   findingsCount: number;
   findingsSummary: string;
+  workspaceFolders: string[];
 }
 
 export class WorkspaceContextRetriever {
@@ -24,6 +26,8 @@ export class WorkspaceContextRetriever {
     const rootPath = folder ? folder.uri.fsPath : process.cwd();
     const repoPath = await findGitRoot(rootPath);
 
+    const allWorkspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+
     // Active File & Selection Context
     let relativeActiveFile: string | undefined;
     let selectedText: string | undefined;
@@ -34,12 +38,20 @@ export class WorkspaceContextRetriever {
       if (!sel.isEmpty) {
         selectedText = editor.document.getText(sel);
       } else {
-        selectedText = editor.document.getText().slice(0, 2000);
+        selectedText = editor.document.getText().slice(0, 2500);
       }
     }
 
-    // Read Key Project Manifests
-    const manifest = await this.readProjectManifest(repoPath);
+    // Git Branch Name
+    let branchName = "main";
+    try {
+      branchName = await git(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    } catch {
+      /* ignore branch resolution error */
+    }
+
+    // Read Key Project Manifests (aggregating multiple if available)
+    const manifest = await this.readProjectManifests(repoPath);
 
     // Read Staged/Unpushed Diffs
     let diff = await stagedDiff(repoPath).catch(() => "");
@@ -49,20 +61,24 @@ export class WorkspaceContextRetriever {
 
     // Active Findings Summary
     const findings = ReviewStateManager.getInstance().activeFindings;
-    const findingsSummary = findings.map((f) => `[${f.severity.toUpperCase()}] ${f.file}:${f.line} - ${f.title}`).join("; ");
+    const findingsSummary = findings
+      .map((f) => `[${f.severity.toUpperCase()}] ${f.file ?? "Workspace"}:${f.line ?? 1} - ${f.title}`)
+      .join("; ");
 
     return {
       repositoryPath: repoPath,
       activeFile: relativeActiveFile,
       selection: selectedText,
       projectManifest: manifest,
-      gitDiff: diff.slice(0, 8000),
+      gitDiff: diff.slice(0, 10_000),
+      branchName,
       findingsCount: findings.length,
-      findingsSummary: findingsSummary.slice(0, 1000)
+      findingsSummary: findingsSummary.slice(0, 1500),
+      workspaceFolders: allWorkspaceFolders
     };
   }
 
-  private static async readProjectManifest(repoPath: string): Promise<string> {
+  private static async readProjectManifests(repoPath: string): Promise<string> {
     const manifestNames = [
       "package.json",
       "requirements.txt",
@@ -71,18 +87,22 @@ export class WorkspaceContextRetriever {
       "README.md",
       "pom.xml",
       "go.mod",
-      "Cargo.toml"
+      "Cargo.toml",
+      "Dockerfile"
     ];
 
+    const results: string[] = [];
     for (const name of manifestNames) {
       const full = path.join(repoPath, name);
       try {
         const content = await fs.readFile(full, "utf8");
-        return `[${name}]\n${content.slice(0, 1500)}`;
+        results.push(`--- [${name}] ---\n${content.slice(0, 1000)}`);
+        if (results.length >= 3) break;
       } catch {
         /* try next manifest */
       }
     }
-    return "Standard Repository Project";
+    return results.length > 0 ? results.join("\n\n") : "Standard Repository Project";
   }
 }
+

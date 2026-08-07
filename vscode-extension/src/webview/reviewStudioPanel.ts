@@ -61,6 +61,10 @@ export class ReviewStudioPanel {
           case "installHooks":
             await vscode.commands.executeCommand("codeguardian.installHooks");
             break;
+          case "resetIgnored":
+            ReviewStateManager.getInstance().resetIgnoredKeys();
+            vscode.window.showInformationMessage("Reset all ignored findings for workspace.");
+            break;
         }
       },
       null,
@@ -108,13 +112,15 @@ export class ReviewStudioPanel {
     const mode = state.activeMode;
     const sessions = state.sessions;
     const highCount = findings.filter((f) => f.severity === "high" || f.severity === "critical").length;
+    const mediumCount = findings.filter((f) => f.severity === "medium").length;
+    const lowCount = findings.filter((f) => f.severity === "low" || f.severity === "info").length;
     const nonce = getNonce();
 
     const findingsHtml = findings.length
       ? findings
           .map(
             (finding, index) => `
-        <div class="card severity-${finding.severity}">
+        <div class="card severity-${finding.severity}" data-severity="${finding.severity}" data-text="${escapeHtml(finding.title + " " + finding.message + " " + (finding.file ?? ""))}">
           <div class="card-header">
             <span class="badge badge-${finding.severity}">${finding.severity.toUpperCase()}</span>
             <span class="file-path">${finding.file ?? "Workspace"}${finding.line ? `:${finding.line}` : ""}</span>
@@ -130,7 +136,7 @@ export class ReviewStudioPanel {
           <div class="actions">
             <button class="btn btn-accept" data-cmd="accept" data-idx="${index}">✅ Accept</button>
             <button class="btn btn-reject" data-cmd="reject" data-idx="${index}">❌ Reject</button>
-            <button class="btn btn-rewrite" data-cmd="rewrite" data-idx="${index}">✏️ Rewrite</button>
+            <button class="btn btn-rewrite" data-cmd="rewrite" data-idx="${index}">✏️ Rewrite with AI</button>
             <button class="btn btn-explain" data-cmd="explain" data-idx="${index}">💡 Explain</button>
             <button class="btn btn-ignore" data-cmd="ignore" data-idx="${index}">👁️ Ignore</button>
           </div>
@@ -152,32 +158,33 @@ export class ReviewStudioPanel {
       font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
       background-color: var(--vscode-editor-background);
       color: var(--vscode-editor-foreground);
-      padding: 20px;
+      padding: 24px;
       margin: 0;
     }
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--vscode-widget-border, #333);
-      margin-bottom: 20px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
+      margin-bottom: 24px;
     }
     .title-area h2 {
       margin: 0;
-      font-size: 20px;
+      font-size: 22px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
     }
     .mode-badge {
       font-size: 11px;
       background: var(--vscode-badge-background);
       color: var(--vscode-badge-foreground);
-      padding: 3px 8px;
+      padding: 4px 10px;
       border-radius: 12px;
       text-transform: uppercase;
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: 0.5px;
     }
     .top-actions {
       display: flex;
@@ -187,14 +194,16 @@ export class ReviewStudioPanel {
       background: var(--vscode-button-background);
       color: var(--vscode-button-foreground);
       border: none;
-      padding: 7px 14px;
+      padding: 8px 16px;
       font-size: 12px;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
-      font-weight: 500;
+      font-weight: 600;
+      transition: all 0.15s;
     }
     .btn:hover {
       background: var(--vscode-button-hoverBackground);
+      transform: translateY(-1px);
     }
     .btn-secondary {
       background: var(--vscode-button-secondaryBackground, #3a3d41);
@@ -203,52 +212,88 @@ export class ReviewStudioPanel {
     .status-summary {
       display: flex;
       gap: 16px;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
     .summary-card {
       background: var(--vscode-editor-inactiveSelectionBackground, #252526);
-      padding: 12px 18px;
-      border-radius: 6px;
+      padding: 16px 20px;
+      border-radius: 8px;
       flex: 1;
       border-left: 4px solid #007acc;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .summary-card.warn {
       border-left-color: #f14c4c;
     }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+    .filter-tabs { display: flex; gap: 8px; }
+    .tab-btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--vscode-widget-border, #444);
+      color: var(--vscode-editor-foreground);
+      padding: 6px 12px;
+      font-size: 11px;
+      border-radius: 16px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .tab-btn.active {
+      background: var(--vscode-button-background);
+      color: #fff;
+      border-color: transparent;
+    }
+    .search-input {
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, #444);
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      width: 220px;
+    }
     .card {
       background: var(--vscode-sideBar-background, #1e1e1e);
-      border: 1px solid var(--vscode-widget-border, #333);
-      border-radius: 6px;
-      padding: 16px;
+      border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
+      border-radius: 8px;
+      padding: 18px;
       margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transition: border-color 0.15s;
     }
+    .card:hover { border-color: rgba(0, 122, 204, 0.5); }
     .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .badge {
       font-size: 10px;
       font-weight: 700;
-      padding: 2px 6px;
-      border-radius: 3px;
+      padding: 3px 8px;
+      border-radius: 4px;
     }
     .badge-critical, .badge-high { background: #f14c4c; color: #fff; }
     .badge-medium { background: #cca700; color: #000; }
     .badge-low, .badge-info { background: #3794ff; color: #fff; }
-    .file-path { font-family: monospace; font-size: 12px; opacity: 0.8; }
-    .card-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
-    .card-message { font-size: 13px; margin-bottom: 10px; opacity: 0.9; }
-    .card-suggestion { font-size: 12px; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; }
-    .code-snippet { font-family: monospace; font-size: 12px; background: #000; padding: 8px; border-radius: 4px; margin-bottom: 10px; overflow-x: auto; }
+    .file-path { font-family: var(--vscode-editor-font-family, Consolas, monospace); font-size: 12px; opacity: 0.85; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 3px; }
+    .card-title { font-weight: 700; font-size: 15px; margin-bottom: 8px; color: var(--vscode-editor-foreground); }
+    .card-message { font-size: 13px; margin-bottom: 12px; opacity: 0.9; line-height: 1.4; }
+    .card-suggestion { font-size: 12px; background: rgba(255,255,255,0.04); border-left: 3px solid #238636; padding: 10px 14px; border-radius: 4px; margin-bottom: 14px; }
+    .code-snippet { font-family: var(--vscode-editor-font-family, Consolas, monospace); font-size: 11px; background: #0d1117; padding: 10px; border-radius: 6px; margin-bottom: 12px; overflow-x: auto; border: 1px solid #21262d; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .btn-accept { background: #2e7d32; }
     .btn-reject { background: #c62828; }
     .btn-rewrite { background: #0277bd; }
     .btn-explain { background: #6a1b9a; }
     .btn-ignore { background: #424242; }
-    .empty-state { text-align: center; padding: 40px; font-size: 15px; opacity: 0.8; }
+    .empty-state { text-align: center; padding: 60px 20px; font-size: 16px; opacity: 0.85; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px dashed var(--vscode-widget-border, #444); }
   </style>
 </head>
 <body>
@@ -260,35 +305,88 @@ export class ReviewStudioPanel {
       <button class="btn" id="btnStaged">🔍 Pre-Commit Review</button>
       <button class="btn" id="btnPush">🚀 Pre-Push Review</button>
       <button class="btn btn-secondary" id="btnHooks">🔌 Install Git Hooks</button>
+      <button class="btn btn-secondary" id="btnReset">🔄 Reset Ignored</button>
     </div>
   </div>
 
   <div class="status-summary">
     <div class="summary-card ${highCount > 0 ? "warn" : ""}">
-      <div style="font-size:12px; opacity:0.8;">Active Findings</div>
-      <div style="font-size:22px; font-weight:bold;">${findings.length}</div>
+      <div style="font-size:12px; opacity:0.8;">Total Active Findings</div>
+      <div style="font-size:24px; font-weight:bold; margin-top:4px;">${findings.length}</div>
     </div>
     <div class="summary-card ${highCount > 0 ? "warn" : ""}">
       <div style="font-size:12px; opacity:0.8;">Critical / High Risk</div>
-      <div style="font-size:22px; font-weight:bold;">${highCount}</div>
+      <div style="font-size:24px; font-weight:bold; margin-top:4px;">${highCount}</div>
+    </div>
+    <div class="summary-card">
+      <div style="font-size:12px; opacity:0.8;">Medium / Low Risk</div>
+      <div style="font-size:24px; font-weight:bold; margin-top:4px;">${mediumCount + lowCount}</div>
     </div>
     <div class="summary-card">
       <div style="font-size:12px; opacity:0.8;">Audit Sessions</div>
-      <div style="font-size:22px; font-weight:bold;">${sessions.length}</div>
+      <div style="font-size:24px; font-weight:bold; margin-top:4px;">${sessions.length}</div>
     </div>
   </div>
 
-  <h3>Findings & Suggestions</h3>
-  ${findingsHtml}
+  <div class="toolbar">
+    <div class="filter-tabs">
+      <button class="tab-btn active" data-filter="all">All (${findings.length})</button>
+      <button class="tab-btn" data-filter="high">High/Critical (${highCount})</button>
+      <button class="tab-btn" data-filter="medium">Medium (${mediumCount})</button>
+      <button class="tab-btn" data-filter="low">Low/Info (${lowCount})</button>
+    </div>
+    <input type="text" class="search-input" id="searchInput" placeholder="Filter findings..." />
+  </div>
+
+  <div id="findingsContainer">
+    ${findingsHtml}
+  </div>
 
   <script nonce="${nonce}">
     (function() {
       const vscode = acquireVsCodeApi();
       const rawFindings = ${JSON.stringify(findings)};
+      let activeFilter = 'all';
+
+      const searchInput = document.getElementById('searchInput');
+      const cards = document.querySelectorAll('.card');
+
+      function filterCards() {
+        const query = (searchInput.value || '').toLowerCase();
+        cards.forEach(card => {
+          const sev = card.getAttribute('data-severity');
+          const text = card.getAttribute('data-text') || '';
+          
+          let matchesSev = activeFilter === 'all';
+          if (activeFilter === 'high') matchesSev = sev === 'critical' || sev === 'high';
+          if (activeFilter === 'medium') matchesSev = sev === 'medium';
+          if (activeFilter === 'low') matchesSev = sev === 'low' || sev === 'info';
+
+          const matchesQuery = !query || text.toLowerCase().includes(query);
+
+          if (matchesSev && matchesQuery) {
+            card.style.display = 'block';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      }
+
+      if (searchInput) {
+        searchInput.addEventListener('input', filterCards);
+      }
 
       document.addEventListener('click', function(e) {
         const target = e.target;
-        if (!target || !target.classList) return;
+        if (!target) return;
+
+        if (target.classList && target.classList.contains('tab-btn')) {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          target.classList.add('active');
+          activeFilter = target.getAttribute('data-filter') || 'all';
+          filterCards();
+          return;
+        }
         
         if (target.id === 'btnStaged') {
           vscode.postMessage({ command: 'analyzeStaged' });
@@ -296,7 +394,9 @@ export class ReviewStudioPanel {
           vscode.postMessage({ command: 'analyzeLatestCommit' });
         } else if (target.id === 'btnHooks') {
           vscode.postMessage({ command: 'installHooks' });
-        } else if (target.hasAttribute('data-cmd')) {
+        } else if (target.id === 'btnReset') {
+          vscode.postMessage({ command: 'resetIgnored' });
+        } else if (target.hasAttribute && target.hasAttribute('data-cmd')) {
           const cmd = target.getAttribute('data-cmd');
           const idx = parseInt(target.getAttribute('data-idx') || '0', 10);
           vscode.postMessage({ command: cmd, finding: rawFindings[idx] });
@@ -307,6 +407,7 @@ export class ReviewStudioPanel {
 </body>
 </html>`;
   }
+
 
   public dispose(): void {
     ReviewStudioPanel.currentPanel = undefined;

@@ -80,17 +80,43 @@ export async function applyPatchToFile(
     const eol = content.includes("\r\n") ? "\r\n" : "\n";
     const lines = content.split(/\r?\n/);
 
-    if (line !== undefined && line > 0 && line <= lines.length) {
-      lines[line - 1] = replacementCode;
-      await fs.writeFile(fullPath, lines.join(eol), "utf8");
-      return true;
-    } else if (originalCode && content.includes(originalCode)) {
+    const cleanOriginal = (originalCode ?? "").trim();
+    const cleanReplacement = replacementCode.trim();
+
+    // 1. Exact string match replacement
+    if (originalCode && content.includes(originalCode)) {
       const updated = content.replace(originalCode, replacementCode);
       await fs.writeFile(fullPath, updated, "utf8");
       return true;
     }
+
+    // 2. Trimmed string match replacement
+    if (cleanOriginal && content.includes(cleanOriginal)) {
+      const updated = content.replace(cleanOriginal, cleanReplacement);
+      await fs.writeFile(fullPath, updated, "utf8");
+      return true;
+    }
+
+    // 3. Line number targeted replacement
+    if (line !== undefined && line > 0 && line <= lines.length) {
+      // Check if line or adjacent lines contain the snippet or if single line replacement
+      const targetIndex = line - 1;
+      const targetLine = lines[targetIndex].trim();
+      const indent = lines[targetIndex].match(/^\s*/)?.[0] ?? "";
+      
+      const indentedReplacement = replacementCode
+        .split(/\r?\n/)
+        .map((l, i) => (i === 0 ? `${indent}${l.trimStart()}` : l))
+        .join(eol);
+
+      lines[targetIndex] = indentedReplacement;
+      await fs.writeFile(fullPath, lines.join(eol), "utf8");
+      return true;
+    }
+
     return false;
   } catch {
     return false;
   }
 }
+

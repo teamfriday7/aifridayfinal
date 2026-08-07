@@ -2,7 +2,7 @@
   "name": "codeguardian-review",
   "displayName": "CodeGuardian Git-Native AI Code Review Assistant",
   "description": "Production-grade, Git-native AI pre-commit and pre-push code review assistant with repository-aware AI chat, interactive diffs, and rule enforcement.",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "publisher": "codeguardian",
   "engines": {
     "vscode": "^1.85.0"
@@ -62,6 +62,12 @@
         "title": "CodeGuardian: Clear Chat History",
         "icon": "$(clear-all)"
       },
+      {
+        "command": "codeguardian.checkConnection",
+        "title": "CodeGuardian: Check Backend Service Connection",
+        "icon": "$(pulse)"
+      },
+
       {
         "command": "codeguardian.explainSelection",
         "title": "CodeGuardian: Ask AI Chat About Selection",

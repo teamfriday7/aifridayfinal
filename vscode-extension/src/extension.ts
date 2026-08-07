@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { analyzeDiff, dedupe } from "./analyzer";
-import { analyzeWithBackend, explainWithBackend, rewriteWithBackend } from "./beClient";
+import { analyzeWithBackend, checkBackendHealth, explainWithBackend, rewriteWithBackend } from "./beClient";
 import { CodeGuardianCodeLensProvider } from "./codeLensProvider";
 import { DiffEditorManager } from "./diffEditorManager";
 import { applyPatchToFile, filesInDiff, findGitRoot, latestCommit, latestCommitDiff, stagedDiff, unpushedDiff } from "./git";
@@ -63,6 +63,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const clearChatCmd = vscode.commands.registerCommand("codeguardian.clearChat", () => {
     chatViewProvider.clearChat();
+  });
+
+  const checkConnectionCmd = vscode.commands.registerCommand("codeguardian.checkConnection", async () => {
+    const folder = await chooseWorkspaceFolder();
+    const config = vscode.workspace.getConfiguration("codeguardian", folder?.uri);
+    const configuredUrl = config.get<string>("beBaseUrl") ?? "http://127.0.0.1:8010";
+
+    const res = await checkBackendHealth(configuredUrl);
+    if (res.online) {
+      vscode.window.showInformationMessage(`✅ CodeGuardian: Connected to backend at ${res.url}`);
+    } else {
+      vscode.window.showWarningMessage(`⚠️ CodeGuardian: Backend sidecar offline (${configuredUrl}). Extension using local deterministic rules.`);
+    }
   });
 
   const explainSelectionCmd = vscode.commands.registerCommand("codeguardian.explainSelection", async () => {
@@ -257,6 +270,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     openChatCmd,
     clearChatCmd,
+    checkConnectionCmd,
     explainSelectionCmd,
     generateTestsCmd,
     analyzeStagedCmd,
@@ -271,6 +285,15 @@ export function activate(context: vscode.ExtensionContext): void {
     ignoreFindingCmd,
     openDiffCmd
   );
+
+  // Configuration change listener
+  vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration("codeguardian")) {
+      output.appendLine("CodeGuardian settings changed. Re-initializing status...");
+      statusBar.update();
+    }
+  }, undefined, context.subscriptions);
+
 
   // Setup watchers for all workspace folders
   setupWorkspaceWatchers(context, output);

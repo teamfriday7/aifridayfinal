@@ -27,6 +27,7 @@ export async function installPrePushHook(repositoryRoot: string, extensionPath: 
     )
   );
 
+  const runner = path.join(extensionPath, "dist", "pre-push-runner.js").replace(/\\/g, "/");
   let existing = "#!/bin/sh\n";
   try {
     existing = await fs.readFile(hookPath, "utf8");
@@ -34,11 +35,11 @@ export async function installPrePushHook(repositoryRoot: string, extensionPath: 
     /* new hook script */
   }
 
-  if (!existing.includes(PRE_PUSH_MARKER)) {
-    const runner = path.join(extensionPath, "dist", "pre-push-runner.js").replace(/\\/g, "/");
-    existing += `\n${PRE_PUSH_MARKER}\nnode "${runner}" "$@"\n`;
-    await fs.writeFile(hookPath, existing, { mode: 0o755 });
-  }
+  // Remove old CodeGuardian pre-push block if present
+  const lines = existing.split(/\r?\n/).filter((line) => !line.includes(PRE_PUSH_MARKER) && !line.includes("pre-push-runner.js"));
+  lines.push(PRE_PUSH_MARKER, `node "${runner}" "$@"`, "");
+
+  await fs.writeFile(hookPath, lines.join("\n"), { mode: 0o755 });
   return hookPath;
 }
 
@@ -63,6 +64,7 @@ export async function installPreCommitHook(repositoryRoot: string, extensionPath
     )
   );
 
+  const runner = path.join(extensionPath, "dist", "pre-commit-runner.js").replace(/\\/g, "/");
   let existing = "#!/bin/sh\n";
   try {
     existing = await fs.readFile(hookPath, "utf8");
@@ -70,10 +72,10 @@ export async function installPreCommitHook(repositoryRoot: string, extensionPath
     /* new hook script */
   }
 
-  if (!existing.includes(PRE_COMMIT_MARKER)) {
-    const runner = path.join(extensionPath, "dist", "pre-commit-runner.js").replace(/\\/g, "/");
-    existing += `\n${PRE_COMMIT_MARKER}\nnode "${runner}" "$@"\n`;
-    await fs.writeFile(hookPath, existing, { mode: 0o755 });
-  }
+  // Remove old CodeGuardian pre-commit block if present
+  const lines = existing.split(/\r?\n/).filter((line) => !line.includes(PRE_COMMIT_MARKER) && !line.includes("pre-commit-runner.js"));
+  lines.push(PRE_COMMIT_MARKER, `node "${runner}" "$@"`, "");
+
+  await fs.writeFile(hookPath, lines.join("\n"), { mode: 0o755 });
   return hookPath;
 }
