@@ -1,0 +1,112 @@
+name: CI — Backend & Enterprise App
+run-name: "${{ github.actor }} triggered CI on ${{ github.ref_name }}"
+
+on:
+  push:
+    branches: [github_actions]
+  pull_request:
+    branches: [github_actions]
+
+# Cancel in-progress runs on the same branch
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# ──────────────────────────────────────────────
+#  BACKEND  —  FastAPI / Uvicorn smoke-test
+# ──────────────────────────────────────────────
+jobs:
+  backend:
+    name: "🐍 Backend — Install & Boot"
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: BE
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: BE/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify FastAPI app imports cleanly
+        run: |
+          python -c "from app.main import app; print('✅ FastAPI app imported successfully')"
+
+      - name: Smoke-test — start server and verify health
+        env:
+          # Supply minimal env vars so the app can boot without real API keys
+          OPENAI_API_KEY: "sk-test-placeholder"
+          OPENAI_MODEL: "gpt-3.5-turbo"
+          OPENAI_BASE_URL: "https://localhost"
+          EMBEDDING_MODEL: "text-embedding-3-large"
+          GENAILAB_API_KEY: "test-placeholder"
+          SECRET_KEY: "ci-test-secret"
+          DATABASE_URL: "sqlite:///./ci_test.db"
+          OPENAI_VERIFY_SSL: "false"
+          EMBEDDING_PROVIDER: "openai"
+        run: |
+          # Start uvicorn in the background
+          python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          SERVER_PID=$!
+
+          # Wait for the server to be ready (up to 30 seconds)
+          echo "⏳ Waiting for server to start..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/docs > /dev/null 2>&1; then
+              echo "✅ Server is up and responding on port 8000"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "❌ Server failed to start within 30 seconds"
+              kill $SERVER_PID 2>/dev/null || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Gracefully shut down
+          kill $SERVER_PID 2>/dev/null || true
+          wait $SERVER_PID 2>/dev/null || true
+          echo "🏁 Backend smoke-test passed"
+
+  # ──────────────────────────────────────────────
+  #  ENTERPRISE APP  —  Next.js build
+  # ──────────────────────────────────────────────
+  enterprise-app:
+    name: "⚛️ Enterprise App — Lint & Build"
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: enterprise-app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: enterprise-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build
