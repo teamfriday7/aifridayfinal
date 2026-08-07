@@ -68,21 +68,38 @@ def _require_model_settings():
     if missing:
         raise RuntimeError(f"Missing required .env setting(s): {', '.join(missing)}")
 
+_llm = None
+
 def get_llm():
-    from langchain_openai import ChatOpenAI
-    _require_model_settings()
-    client = httpx.Client(
-        verify=VERIFY_SSL,
-        timeout=httpx.Timeout(OPENAI_TIMEOUT_SECONDS, connect=15.0),
-    )
-    return ChatOpenAI(
-        model=LLM_MODEL,
-        api_key=API_KEY,
-        base_url=BASE_URL,
-        http_client=client,
-        timeout=OPENAI_TIMEOUT_SECONDS,
-        max_retries=0,
-    )
+    global _llm
+
+    if _llm is None:
+        from langchain_openai import ChatOpenAI
+
+        _require_model_settings()
+
+        client = httpx.Client(
+            verify=VERIFY_SSL,
+            timeout=httpx.Timeout(
+                OPENAI_TIMEOUT_SECONDS,
+                connect=30,
+            ),
+            limits=httpx.Limits(
+                max_connections=100,
+                max_keepalive_connections=50,
+            ),
+        )
+
+        _llm = ChatOpenAI(
+            model=LLM_MODEL,
+            api_key=API_KEY,
+            base_url=BASE_URL,
+            http_client=client,
+            timeout=OPENAI_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
+
+    return _llm
 
 def get_embeddings():
     global _embeddings
