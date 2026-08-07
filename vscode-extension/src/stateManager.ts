@@ -1,4 +1,7 @@
+import * as fs from "fs/promises";
+import * as path from "path";
 import * as vscode from "vscode";
+import { findGitRoot } from "./git";
 import { Finding, FindingStatus, ReviewSession } from "./types";
 
 export class ReviewStateManager {
@@ -31,7 +34,7 @@ export class ReviewStateManager {
 
   public get activeFindings(): Finding[] {
     return this._activeFindings.filter(
-      (f) => f.status !== "ignored" && f.status !== "rejected" && !this.isIgnored(f)
+      (f) => f.status !== "ignored" && f.status !== "rejected" && f.status !== "accepted" && !this.isIgnored(f)
     );
   }
 
@@ -91,7 +94,7 @@ export class ReviewStateManager {
     );
     if (finding) {
       finding.status = status;
-      if (status === "ignored") {
+      if (status === "ignored" || status === "rejected" || status === "accepted") {
         this.ignoreFinding(finding);
       }
       this._onDidChangeState.fire();
@@ -99,22 +102,41 @@ export class ReviewStateManager {
   }
 
   public ignoreFinding(finding: Finding): void {
-    const key = this.getFindingKey(finding);
-    this._ignoredKeys.add(key);
+    const key1 = `${finding.file ?? ""}:${finding.line ?? ""}`;
+    const key2 = `${finding.title}:${finding.file ?? ""}:${finding.line ?? ""}`;
+    const key3 = finding.title;
+
+    this._ignoredKeys.add(key1);
+    this._ignoredKeys.add(key2);
+    this._ignoredKeys.add(key3);
+
     finding.status = "ignored";
+
     if (this._context) {
       void this._context.workspaceState.update("codeguardian.ignoredKeys", Array.from(this._ignoredKeys));
     }
+
+    void this.syncIgnoredKeysToGitHooks();
     this._onDidChangeState.fire();
   }
 
   public isIgnored(finding: Finding): boolean {
-    const key = this.getFindingKey(finding);
-    return this._ignoredKeys.has(key);
+    const key1 = `${finding.file ?? ""}:${finding.line ?? ""}`;
+    const key2 = `${finding.title}:${finding.file ?? ""}:${finding.line ?? ""}`;
+    const key3 = finding.title;
+    return this._ignoredKeys.has(key1) || this._ignoredKeys.has(key2) || this._ignoredKeys.has(key3);
   }
 
-  private getFindingKey(finding: Finding): string {
-    return `${finding.title}:${finding.file ?? ""}:${finding.line ?? ""}`;
+  private async syncIgnoredKeysToGitHooks(): Promise<void> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return;
+    try {
+      const gitRoot = await findGitRoot(folder.uri.fsPath);
+      const ignoredFile = path.join(gitRoot, ".git", "hooks", "codeguardian-ignored.json");
+      await fs.writeFile(ignoredFile, JSON.stringify(Array.from(this._ignoredKeys), null, 2), "utf8");
+    } catch {
+      /* ignore sync error */
+    }
   }
 
   public clear(): void {

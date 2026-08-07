@@ -55,6 +55,27 @@ export interface ExplainResponse {
   remediationSteps?: string[];
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface ChatRequest {
+  messages: ChatMessage[];
+  repositoryPath?: string;
+  activeFile?: string;
+  selection?: string;
+  gitDiff?: string;
+  projectManifest?: string;
+  findings?: Finding[];
+}
+
+export interface ChatResponse {
+  reply: string;
+  suggestedActions?: string[];
+  patchDiff?: string;
+}
+
 export interface ReviewSession {
   id: string;
   timestamp: string;

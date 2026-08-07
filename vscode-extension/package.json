@@ -1,8 +1,8 @@
 {
   "name": "codeguardian-review",
   "displayName": "CodeGuardian Git-Native AI Code Review Assistant",
-  "description": "Production-grade, Git-native AI pre-commit and pre-push code review assistant with interactive diffs, inline suggestions, and rule enforcement.",
-  "version": "0.2.0",
+  "description": "Production-grade, Git-native AI pre-commit and pre-push code review assistant with repository-aware AI chat, interactive diffs, and rule enforcement.",
+  "version": "0.3.2",
   "publisher": "codeguardian",
   "engines": {
     "vscode": "^1.85.0"
@@ -29,6 +29,12 @@
     "views": {
       "codeguardian-view-container": [
         {
+          "type": "webview",
+          "id": "codeguardian.chatView",
+          "name": "AI Assistant Chat",
+          "icon": "$(comment-discussion)"
+        },
+        {
           "id": "codeguardian.reviewTree",
           "name": "Git Review Explorer",
           "icon": "$(git-commit)"
@@ -47,6 +53,26 @@
     },
     "commands": [
       {
+        "command": "codeguardian.openChat",
+        "title": "CodeGuardian: Open AI Chat Assistant",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "codeguardian.clearChat",
+        "title": "CodeGuardian: Clear Chat History",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "codeguardian.explainSelection",
+        "title": "CodeGuardian: Ask AI Chat About Selection",
+        "icon": "$(question)"
+      },
+      {
+        "command": "codeguardian.generateTests",
+        "title": "CodeGuardian: Generate Unit Tests for Active File",
+        "icon": "$(beaker)"
+      },
+      {
         "command": "codeguardian.analyzeStaged",
         "title": "CodeGuardian: Analyze Pre-Commit (Staged Changes)",
         "icon": "$(git-pull-request)"
@@ -60,6 +86,11 @@
         "command": "codeguardian.openReviewStudio",
         "title": "CodeGuardian: Open Review Studio",
         "icon": "$(layout)"
+      },
+      {
+        "command": "codeguardian.openReviewReport",
+        "title": "CodeGuardian: Open Markdown Review Report",
+        "icon": "$(book)"
       },
       {
         "command": "codeguardian.installHooks",
@@ -97,7 +128,22 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "codeguardian.explainSelection",
+          "group": "codeguardian@1"
+        },
+        {
+          "command": "codeguardian.generateTests",
+          "group": "codeguardian@2"
+        }
+      ],
       "view/title": [
+        {
+          "command": "codeguardian.clearChat",
+          "when": "view == codeguardian.chatView",
+          "group": "navigation@1"
+        },
         {
           "command": "codeguardian.analyzeStaged",
           "when": "view == codeguardian.reviewTree",
@@ -114,9 +160,14 @@
           "group": "navigation@3"
         },
         {
-          "command": "codeguardian.installHooks",
+          "command": "codeguardian.openReviewReport",
           "when": "view == codeguardian.reviewTree",
           "group": "navigation@4"
+        },
+        {
+          "command": "codeguardian.installHooks",
+          "when": "view == codeguardian.reviewTree",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [
@@ -154,6 +205,11 @@
           "type": "string",
           "default": "http://127.0.0.1:8010",
           "description": "URL of the standalone CodeGuardian BE analysis sidecar."
+        },
+        "codeguardian.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional API Key (OpenAI / GenAILab) for full AI chat, code analysis, and AI rewrites."
         },
         "codeguardian.authToken": {
           "type": "string",

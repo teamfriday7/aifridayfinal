@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as path from "path";
 import * as vscode from "vscode";
 import { ReviewStateManager } from "../stateManager";
@@ -18,8 +19,20 @@ export class ReviewStudioPanel {
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
     ReviewStateManager.getInstance().onDidChangeState(() => {
-      this._update();
+      if (this._panel && this._panel.visible) {
+        this._update();
+      }
     }, null, this._disposables);
+
+    this._panel.onDidChangeViewState(
+      (e) => {
+        if (e.webviewPanel.visible) {
+          this._update();
+        }
+      },
+      null,
+      this._disposables
+    );
 
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
@@ -63,20 +76,27 @@ export class ReviewStudioPanel {
       return;
     }
 
-    const panel = vscode.window.createWebviewPanel(
-      "codeguardianReviewStudio",
-      "CodeGuardian Review Studio",
-      column || vscode.ViewColumn.One,
-      {
-        enableScripts: true,
-        localResourceRoots: [vscode.Uri.file(path.join(extensionUri.fsPath, "media"))]
-      }
-    );
+    try {
+      const panel = vscode.window.createWebviewPanel(
+        "codeguardianReviewStudio",
+        "CodeGuardian Review Studio",
+        column || vscode.ViewColumn.One,
+        {
+          enableScripts: true,
+          retainContextWhenHidden: true,
+          localResourceRoots: [extensionUri]
+        }
+      );
 
-    ReviewStudioPanel.currentPanel = new ReviewStudioPanel(panel, extensionUri);
+      ReviewStudioPanel.currentPanel = new ReviewStudioPanel(panel, extensionUri);
+    } catch (err) {
+      // Fall back gracefully to Markdown Review Report if VS Code webview host blocks Service Workers
+      void vscode.commands.executeCommand("codeguardian.openReviewReport");
+    }
   }
 
   private _update(): void {
+    if (!this._panel) return;
     const webview = this._panel.webview;
     this._panel.title = "CodeGuardian Review Studio";
     this._panel.webview.html = this._getHtmlForWebview(webview);
@@ -88,6 +108,7 @@ export class ReviewStudioPanel {
     const mode = state.activeMode;
     const sessions = state.sessions;
     const highCount = findings.filter((f) => f.severity === "high" || f.severity === "critical").length;
+    const nonce = getNonce();
 
     const findingsHtml = findings.length
       ? findings
@@ -107,11 +128,11 @@ export class ReviewStudioPanel {
           }
           <div class="card-suggestion">💡 <strong>Suggestion:</strong> ${escapeHtml(finding.suggestion)}</div>
           <div class="actions">
-            <button class="btn btn-accept" onclick="postCmd('accept', ${index})">✅ Accept</button>
-            <button class="btn btn-reject" onclick="postCmd('reject', ${index})">❌ Reject</button>
-            <button class="btn btn-rewrite" onclick="postCmd('rewrite', ${index})">✏️ Rewrite</button>
-            <button class="btn btn-explain" onclick="postCmd('explain', ${index})">💡 Explain</button>
-            <button class="btn btn-ignore" onclick="postCmd('ignore', ${index})">👁️ Ignore</button>
+            <button class="btn btn-accept" data-cmd="accept" data-idx="${index}">✅ Accept</button>
+            <button class="btn btn-reject" data-cmd="reject" data-idx="${index}">❌ Reject</button>
+            <button class="btn btn-rewrite" data-cmd="rewrite" data-idx="${index}">✏️ Rewrite</button>
+            <button class="btn btn-explain" data-cmd="explain" data-idx="${index}">💡 Explain</button>
+            <button class="btn btn-ignore" data-cmd="ignore" data-idx="${index}">👁️ Ignore</button>
           </div>
         </div>
       `
@@ -123,6 +144,7 @@ export class ReviewStudioPanel {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CodeGuardian Review Studio</title>
   <style>
@@ -235,9 +257,9 @@ export class ReviewStudioPanel {
       <h2>🛡️ CodeGuardian Review Studio <span class="mode-badge">${mode}</span></h2>
     </div>
     <div class="top-actions">
-      <button class="btn" onclick="postGlobal('analyzeStaged')">🔍 Pre-Commit Review</button>
-      <button class="btn" onclick="postGlobal('analyzeLatestCommit')">🚀 Pre-Push Review</button>
-      <button class="btn btn-secondary" onclick="postGlobal('installHooks')">🔌 Install Git Hooks</button>
+      <button class="btn" id="btnStaged">🔍 Pre-Commit Review</button>
+      <button class="btn" id="btnPush">🚀 Pre-Push Review</button>
+      <button class="btn btn-secondary" id="btnHooks">🔌 Install Git Hooks</button>
     </div>
   </div>
 
@@ -259,16 +281,28 @@ export class ReviewStudioPanel {
   <h3>Findings & Suggestions</h3>
   ${findingsHtml}
 
-  <script>
-    const vscode = acquireVsCodeApi();
-    const rawFindings = ${JSON.stringify(findings)};
+  <script nonce="${nonce}">
+    (function() {
+      const vscode = acquireVsCodeApi();
+      const rawFindings = ${JSON.stringify(findings)};
 
-    function postCmd(cmd, index) {
-      vscode.postMessage({ command: cmd, finding: rawFindings[index] });
-    }
-    function postGlobal(cmd) {
-      vscode.postMessage({ command: cmd });
-    }
+      document.addEventListener('click', function(e) {
+        const target = e.target;
+        if (!target || !target.classList) return;
+        
+        if (target.id === 'btnStaged') {
+          vscode.postMessage({ command: 'analyzeStaged' });
+        } else if (target.id === 'btnPush') {
+          vscode.postMessage({ command: 'analyzeLatestCommit' });
+        } else if (target.id === 'btnHooks') {
+          vscode.postMessage({ command: 'installHooks' });
+        } else if (target.hasAttribute('data-cmd')) {
+          const cmd = target.getAttribute('data-cmd');
+          const idx = parseInt(target.getAttribute('data-idx') || '0', 10);
+          vscode.postMessage({ command: cmd, finding: rawFindings[idx] });
+        }
+      });
+    })();
   </script>
 </body>
 </html>`;
@@ -282,6 +316,15 @@ export class ReviewStudioPanel {
       if (x) x.dispose();
     }
   }
+}
+
+function getNonce(): string {
+  let text = "";
+  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
 }
 
 function escapeHtml(text: string): string {
