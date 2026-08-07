@@ -12,11 +12,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ==========================
 
 SONAR_HOST = "https://sonarcloud.io"
-SONAR_TOKEN = "51c9835e01b91eb9c5834b762aaa51a93f8e33b9"
-PROJECT_KEY = "teamfriday7_aifridayfinal"
+SONAR_TOKEN = "sqp_58c979bd7a491d8039e840c13ed7cd93992d0b6a"
+PROJECT_KEY = "teamfriday7_aifriday"
 
 # Local path to your Git repository
-REPO_PATH = r"C:\repo\sonarqube_report"
+REPO_PATH = r"C:\GitRemote"
 
 auth = HTTPBasicAuth(SONAR_TOKEN, "")
 

@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 
 from .database import Base
 
@@ -150,3 +150,51 @@ class DeveloperScore(Base):
 
     user = relationship("User", back_populates="scores")
 
+
+class SonarConfig(Base):
+    """SonarCloud / SonarQube connection settings, stored per-project."""
+    __tablename__ = "sonar_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    sonar_host = Column(String(500), nullable=False)
+    sonar_token = Column(String(500), nullable=False)
+    sonar_project_key = Column(String(200), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AnalysisSummary(Base):
+    """Composite quality summary produced by MetaAnalyzer for each commit.
+
+    Stores the merged score across SonarCloud + LLM Logic Analyzer findings,
+    plus the LLM-generated executive summary and recommendations.
+    """
+    __tablename__ = "analysis_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    commit_id = Column(Integer, ForeignKey("commits.id"), nullable=False, unique=True)
+
+    # ── composite scores (0-100, higher=better) ────────────────────────────────
+    composite_score = Column(Float, default=0.0)
+    maintainability_score = Column(Float, default=0.0)
+    reliability_score = Column(Float, default=0.0)
+    security_score = Column(Float, default=0.0)
+    performance_score = Column(Float, default=0.0)
+    guideline_score = Column(Float, default=0.0)
+
+    # ── LLM-generated narrative ────────────────────────────────────────────────
+    executive_summary = Column(Text, default="")
+    key_issues = Column(Text, default="[]")        # JSON list of strings
+    recommendations = Column(Text, default="[]")   # JSON list of strings
+
+    # ── finding counts by source ───────────────────────────────────────────────
+    total_findings = Column(Integer, default=0)
+    sonar_findings = Column(Integer, default=0)
+    logic_findings = Column(Integer, default=0)
+    kb_insights = Column(Integer, default=0)
+
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    commit = relationship("Commit", backref=backref("analysis_summary", uselist=False))
