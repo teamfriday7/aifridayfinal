@@ -5,6 +5,8 @@ from app.models.notification import EmailRequest
 
 from app.services.email_service import send_email
 
+from app.models.notification import SlackRequest
+from app.services.slack_service import send_slack_message
 
 
 router = APIRouter()
@@ -64,3 +66,8 @@ def email_notification(
         "response": response
 
     }
+
+@router.post("/slack")
+def slack_notification(request: SlackRequest):
+
+    return send_slack_message(request.message)
