@@ -99,9 +99,6 @@ export function AgentPipeline() {
             const d = msg.data!;
             resetAgents();
             updateAgent('git_watcher', { status: 'success', startedAt: Date.now() - 100, finishedAt: Date.now(), details: `${d.files_changed ?? 0} files changed` });
-            updateAgent('kb_agent', { status: 'running', startedAt: Date.now() });
-            updateAgent('logic_analyzer', { status: 'running', startedAt: Date.now() });
-            updateAgent('sonarcloud', { status: 'running', startedAt: Date.now() });
             setLastCommit({ hash: d.hash ?? '', author: d.author ?? '', message: d.message ?? '' });
             pushEvent(`🔀 New commit detected: ${d.hash?.slice(0, 8)} by ${d.author} — "${d.message}"`, 'commit');
             break;
@@ -112,14 +109,29 @@ export function AgentPipeline() {
             break;
           }
 
+          case 'agent_started': {
+            if (msg.agent) updateAgent(msg.agent, { status: 'running', startedAt: Date.now() });
+            break;
+          }
+
+          case 'agent_finished': {
+            if (msg.agent) {
+              updateAgent(msg.agent, { 
+                status: 'success', 
+                finishedAt: Date.now(), 
+                details: msg.details, 
+                findings: msg.findings, 
+                score: msg.score 
+              });
+              if (msg.agent === 'meta_analyzer' && msg.score !== undefined) {
+                setLastCommit(prev => prev ? { ...prev, score: msg.score } : prev);
+              }
+            }
+            break;
+          }
+
           case 'analysis_complete': {
             const score = msg.composite_score ?? 0;
-            updateAgent('kb_agent', { status: 'success', finishedAt: Date.now(), details: msg.kb_processed ? 'KB generated' : 'No KB' });
-            updateAgent('logic_analyzer', { status: 'success', finishedAt: Date.now(), details: `${msg.logic_findings ?? 0} findings`, findings: msg.logic_findings });
-            updateAgent('sonarcloud', { status: 'success', finishedAt: Date.now(), details: `${msg.sonar_findings ?? 0} issues`, findings: msg.sonar_findings });
-            updateAgent('meta_analyzer', { status: 'success', startedAt: Date.now() - 500, finishedAt: Date.now(), details: `${msg.total_findings ?? 0} total findings`, score });
-            updateAgent('review_engine', { status: 'success', startedAt: Date.now() - 200, finishedAt: Date.now(), details: `${msg.reviews_created ?? 0} reviews created` });
-            setLastCommit(prev => prev ? { ...prev, score } : prev);
             pushEvent(`✅ Analysis complete — Score: ${score}/100 | ${msg.total_findings ?? 0} findings | ${msg.reviews_created ?? 0} reviews`, 'success');
             break;
           }
