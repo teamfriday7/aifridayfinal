@@ -21,10 +21,16 @@ CHROMA_DIR = os.environ.get('CHROMA_PATH', os.path.join(BASE_DIR, 'chroma_defect
 
 # The OKF agent intentionally has a single provider: values come only from .env.
 BASE_URL = os.environ.get('OPENAI_BASE_URL')
+if BASE_URL and not BASE_URL.rstrip('/').endswith('/v1'):
+    BASE_URL = f"{BASE_URL.rstrip('/')}/v1"
 LLM_MODEL = os.environ.get('OPENAI_MODEL')
 EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL')
 API_KEY = os.environ.get('OPENAI_API_KEY')
+import threading
+
 OPENAI_TIMEOUT_SECONDS = float(os.environ.get('OPENAI_TIMEOUT_SECONDS', '45'))
+OPENAI_MAX_RETRIES = int(os.environ.get('OPENAI_MAX_RETRIES', '3'))
+OPENAI_RETRY_DELAY_SECONDS = float(os.environ.get('OPENAI_RETRY_DELAY_SECONDS', '5'))
 VERIFY_SSL = os.environ.get('OPENAI_VERIFY_SSL', 'true').strip().lower() not in {'0', 'false', 'no'}
 
 FLASK_PORT = 8000
@@ -35,6 +41,7 @@ TIKTOKEN_CACHE_DIR = os.path.join(BASE_DIR, '.tiktoken_cache')
 os.environ['TIKTOKEN_CACHE_DIR'] = TIKTOKEN_CACHE_DIR
 os.makedirs(TIKTOKEN_CACHE_DIR, exist_ok=True)
 
+_lock = threading.Lock()
 _http_client = None
 _llm = None
 _embeddings = None
@@ -43,10 +50,13 @@ _vectordb = None
 def get_http_client():
     global _http_client
     if _http_client is None:
-        _http_client = httpx.Client(
-            verify=VERIFY_SSL,
-            timeout=httpx.Timeout(OPENAI_TIMEOUT_SECONDS, connect=15.0),
-        )
+        with _lock:
+            if _http_client is None:
+                _http_client = httpx.Client(
+                    verify=VERIFY_SSL,
+                    timeout=httpx.Timeout(OPENAI_TIMEOUT_SECONDS, connect=15.0),
+                    limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+                )
     return _http_client
 
 def _require_model_settings():
@@ -59,19 +69,20 @@ def _require_model_settings():
         raise RuntimeError(f"Missing required .env setting(s): {', '.join(missing)}")
 
 def get_llm():
-    global _llm
-    if _llm is None:
-        from langchain_openai import ChatOpenAI
-        _require_model_settings()
-        _llm = ChatOpenAI(
-            model=LLM_MODEL,
-            api_key=API_KEY,
-            base_url=BASE_URL,
-            http_client=get_http_client(),
-            timeout=OPENAI_TIMEOUT_SECONDS,
-            max_retries=0,
-        )
-    return _llm
+    from langchain_openai import ChatOpenAI
+    _require_model_settings()
+    client = httpx.Client(
+        verify=VERIFY_SSL,
+        timeout=httpx.Timeout(OPENAI_TIMEOUT_SECONDS, connect=15.0),
+    )
+    return ChatOpenAI(
+        model=LLM_MODEL,
+        api_key=API_KEY,
+        base_url=BASE_URL,
+        http_client=client,
+        timeout=OPENAI_TIMEOUT_SECONDS,
+        max_retries=0,
+    )
 
 def get_embeddings():
     global _embeddings
