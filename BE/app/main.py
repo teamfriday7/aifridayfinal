@@ -429,6 +429,8 @@ class ProjectCreate(BaseModel):
 class AcceptReviewRequest(BaseModel):
     accepted_by: str = "admin"
     working_copy: str = r"C:\aifridayfinal"
+    rule_category: Optional[str] = None
+    reason: Optional[str] = None
 
 
 # ─── Health ─────────────────────────────────────────────────────────────────────
