@@ -21,12 +21,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   ): void {
     this._view = webviewView;
 
+    const workspaceRoots = (vscode.workspace.workspaceFolders || []).map((f) => f.uri);
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [this._extensionUri]
+      localResourceRoots: [this._extensionUri, ...workspaceRoots]
     };
 
+
+    webviewView.onDidDispose(() => {
+      this._view = undefined;
+    });
+
+    this._updateHtml();
     void this.refreshContextAndRender();
+
+
 
     webviewView.webview.onDidReceiveMessage(async (data) => {
       switch (data.type) {
@@ -208,11 +217,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
          </div>`
       : "";
 
+    const cspSource = this._view ? this._view.webview.cspSource : "vscode-webview:";
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this._view?.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' ${cspSource} 'unsafe-inline' 'unsafe-eval'; img-src ${cspSource} https: data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${cspSource} 'unsafe-inline' 'unsafe-eval'; font-src ${cspSource} data:;">
+
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CodeGuardian Chat</title>
   <style>
