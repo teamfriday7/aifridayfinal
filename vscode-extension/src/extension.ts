@@ -332,8 +332,21 @@ function setupWorkspaceWatchers(context: vscode.ExtensionContext, output: vscode
 async function chooseWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   if (folders.length === 1) return folders[0];
-  return vscode.window.showWorkspaceFolderPick({ placeHolder: "Choose a Git repository for CodeGuardian review" });
+  if (folders.length > 1) {
+    return vscode.window.showWorkspaceFolderPick({ placeHolder: "Choose a Git repository for CodeGuardian review" });
+  }
+  const editor = vscode.window.activeTextEditor;
+  if (editor) {
+    const gitRoot = await findGitRoot(path.dirname(editor.document.fileName));
+    return {
+      uri: vscode.Uri.file(gitRoot),
+      name: path.basename(gitRoot),
+      index: 0
+    };
+  }
+  return undefined;
 }
+
 
 async function runAnalysisWithProgress(root: string, mode: "pre-commit" | "pre-push", output: vscode.OutputChannel): Promise<void> {
   await vscode.window.withProgress(

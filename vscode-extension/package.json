@@ -13,9 +13,18 @@
     "AI"
   ],
   "activationEvents": [
+    "onView:codeguardian.chatView",
+    "onCommand:codeguardian.openChat",
+    "onCommand:codeguardian.openReviewStudio",
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
   "main": "./dist/extension.js",
+
   "contributes": {
     "viewsContainers": {
       "activitybar": [

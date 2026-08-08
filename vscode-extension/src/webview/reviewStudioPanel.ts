@@ -76,19 +76,24 @@ export class ReviewStudioPanel {
     const column = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined;
 
     if (ReviewStudioPanel.currentPanel) {
-      ReviewStudioPanel.currentPanel._panel.reveal(column);
-      return;
+      try {
+        ReviewStudioPanel.currentPanel._panel.reveal(column);
+        return;
+      } catch {
+        ReviewStudioPanel.currentPanel = undefined;
+      }
     }
 
     try {
+      const workspaceRoots = (vscode.workspace.workspaceFolders || []).map((f) => f.uri);
       const panel = vscode.window.createWebviewPanel(
         "codeguardianReviewStudio",
         "CodeGuardian Review Studio",
         column || vscode.ViewColumn.One,
         {
           enableScripts: true,
-          retainContextWhenHidden: true,
-          localResourceRoots: [extensionUri]
+          retainContextWhenHidden: false,
+          localResourceRoots: [extensionUri, ...workspaceRoots]
         }
       );
 
@@ -99,12 +104,18 @@ export class ReviewStudioPanel {
     }
   }
 
+
   private _update(): void {
     if (!this._panel) return;
-    const webview = this._panel.webview;
-    this._panel.title = "CodeGuardian Review Studio";
-    this._panel.webview.html = this._getHtmlForWebview(webview);
+    try {
+      const webview = this._panel.webview;
+      this._panel.title = "CodeGuardian Review Studio";
+      this._panel.webview.html = this._getHtmlForWebview(webview);
+    } catch {
+      void vscode.commands.executeCommand("codeguardian.openReviewReport");
+    }
   }
+
 
   private _getHtmlForWebview(webview: vscode.Webview): string {
     const state = ReviewStateManager.getInstance();
@@ -150,7 +161,8 @@ export class ReviewStudioPanel {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' ${webview.cspSource} 'unsafe-inline' 'unsafe-eval'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'unsafe-inline' 'unsafe-eval'; font-src ${webview.cspSource} data:;">
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CodeGuardian Review Studio</title>
   <style>
