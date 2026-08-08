@@ -26,10 +26,10 @@ GIT_BIN = r"C:\Users\GenAITVMSEZUSR4\AppData\Local\Programs\Git\cmd\git.exe"
 
 # Developer working copy — the non-bare repo where patches are applied.
 # Configurable per-project; defaults to the demo path.
-DEFAULT_WORKING_COPY = r"C:\aifridayfinal"
+DEFAULT_WORKING_COPY = r"C:\sonarqube_report-main"
 
 # Remote to push to after applying the fix
-GIT_REMOTE = r"C:\GitRemote"
+GIT_REMOTE = r"C:\sonarqube_report-main"
 
 # AI bot commit identity
 AI_AUTHOR_NAME = "AI-Review Bot"

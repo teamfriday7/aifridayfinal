@@ -8,7 +8,7 @@ The existing codebase at `C:\EnterpriseCodeAnalysisApp\aifridayfinal` has:
 - **Backend** ([BE/](file:///c:/EnterpriseCodeAnalysisApp/aifridayfinal/BE)): A Python FastAPI app with a multi-agent RAG pipeline, Flask-based AI Gateway (auth, guardrails, rate limiting), ChromaDB vector store
 - **Frontend** ([enterprise-app/](file:///c:/EnterpriseCodeAnalysisApp/aifridayfinal/enterprise-app)): A fresh Next.js 16 + React 19 + Tailwind CSS v4 scaffold (no custom UI yet)
 - **Git**: 3 commits on `origin` (GitHub), git binary at `C:\Users\GenAITVMSEZUSR4\AppData\Local\Programs\Git\cmd\git.exe`
-- **Simulated Environment**: `C:\GitRemote` = simulated bare git remote, `C:\aifridayfinal` = simulated developer project
+- **Simulated Environment**: `C:\GitRemote` = simulated bare git remote, `C:\sonarqube_report-main` = simulated developer project
 
 > [!IMPORTANT]
 > The existing backend code is a RAG document Q&A system from a previous hackathon (textile defect detection). We will **repurpose the architecture** (multi-agent framework, gateway, auth) but **rebuild the agents and endpoints** for code analysis.
@@ -46,7 +46,7 @@ The existing codebase at `C:\EnterpriseCodeAnalysisApp\aifridayfinal` has:
 ```mermaid
 graph TB
     subgraph "Developer Workflow"
-        DEV["Developer Machine<br/>C:\aifridayfinal"]
+        DEV["Developer Machine<br/>C:\sonarqube_report-main"]
         GR["Local Git Remote<br/>C:\GitRemote"]
         DEV -->|"git push"| GR
     end
@@ -499,7 +499,7 @@ cd enterprise-app && npm run lint
 
 1. **Git Watcher Test**:
    - Start the backend server
-   - Make a commit in `C:\aifridayfinal`
+   - Make a commit in `C:\sonarqube_report-main`
    - Push to `C:\GitRemote`
    - Verify the commit appears in the BE server console log within 3 seconds
    - Verify WebSocket notification reaches the frontend

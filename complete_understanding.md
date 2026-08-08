@@ -3,7 +3,7 @@
 
 **Author:** Staff / Principal Software Engineer  
 **Date:** August 8, 2026  
-**Scope:** Full Repository (`c:\aifridayfinal`) — Subsystems: `BE/`, `chatbot/`, `enterprise-app/`, `vscode-extension/`
+**Scope:** Full Repository (`C:\sonarqube_report-main`) — Subsystems: `BE/`, `chatbot/`, `enterprise-app/`, `vscode-extension/`
 
 ---
 
@@ -47,7 +47,7 @@ graph TB
     subgraph "IDE & Developer Environment"
         VSC["VS Code Extension<br/>(codeguardian-review)"]
         HOOKS["Git Hooks<br/>(.git/hooks/pre-commit)"]
-        DEV_GIT["Local Developer Git Repo<br/>(C:\aifridayfinal)"]
+        DEV_GIT["Local Developer Git Repo<br/>(C:\sonarqube_report-main)"]
     end
 
     subgraph "Git Remote Environment"

@@ -428,7 +428,7 @@ class ProjectCreate(BaseModel):
 
 class AcceptReviewRequest(BaseModel):
     accepted_by: str = "admin"
-    working_copy: str = r"C:\aifridayfinal"
+    working_copy: str = r"C:\sonarqube_report-main"
     rule_category: Optional[str] = None
     reason: Optional[str] = None
 
@@ -860,7 +860,7 @@ def accept_review(
         raise HTTPException(status_code=404, detail="Review not found")
 
     accepted_by = (request.accepted_by if request else None) or "admin"
-    working_copy = (request.working_copy if request else None) or r"C:\aifridayfinal"
+    working_copy = (request.working_copy if request else None) or r"C:\sonarqube_report-main"
 
     result = {"review_accepted": True, "commit_result": None}
 
